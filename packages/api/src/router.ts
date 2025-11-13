@@ -17,10 +17,12 @@ export const appRouter = t.router({
     }),
 
     create: t.procedure
-      .input(z.object({
-        email: z.string().email(),
-        name: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          email: z.string().email(),
+          name: z.string().optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const [user] = await ctx.db
           .insert(schema.users)

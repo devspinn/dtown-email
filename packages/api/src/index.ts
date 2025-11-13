@@ -19,7 +19,7 @@ app.use(
 );
 
 // Health check endpoint
-app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/health", (c) => c.json({ status: "ok!" }));
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3002;
 

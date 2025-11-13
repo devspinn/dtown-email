@@ -7,9 +7,9 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "db:push": "dotenvx run -- pnpm --filter @yieldplat/db run push",
-    "db:studio": "dotenvx run -- pnpm --filter @yieldplat/db run studio",
-    "db:generate": "dotenvx run -- pnpm --filter @yieldplat/db run generate"
+    "db:push": "dotenvx run -- pnpm --filter @yieldplat/db run db:push",
+    "db:studio": "dotenvx run -- pnpm --filter @yieldplat/db run db:studio",
+    "db:generate": "dotenvx run -- pnpm --filter @yieldplat/db run db:generate"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.51.1",
