@@ -12,7 +12,7 @@ export const appRouter = t.router({
 
   users: t.router({
     list: t.procedure.query(async ({ ctx }) => {
-      const users = await ctx.db.select().from(schema.users);
+      const users = await ctx.db.select().from(schema.user);
       return users;
     }),
 
@@ -20,15 +20,15 @@ export const appRouter = t.router({
       .input(
         z.object({
           email: z.string().email(),
-          name: z.string().optional(),
+          name: z.string(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const [user] = await ctx.db
-          .insert(schema.users)
+        const [newUser] = await ctx.db
+          .insert(schema.user)
           .values(input)
           .returning();
-        return user;
+        return newUser;
       }),
   }),
 });

@@ -10,6 +10,7 @@
     "@hono/node-server": "^1.13.7",
     "@hono/trpc-server": "^0.4.0",
     "@trpc/server": "^11.7.1",
+    "@yieldplat/auth": "workspace:*",
     "@yieldplat/db": "workspace:*",
     "hono": "^4.10.5",
     "zod": "^4.1.12"

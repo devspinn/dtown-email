@@ -4,11 +4,20 @@ import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { cors } from "hono/cors";
+import { auth } from "@yieldplat/auth";
 
 const app = new Hono();
 
 // Enable CORS for local development
-app.use("*", cors());
+app.use("*", cors({
+  origin: "http://localhost:3000",
+  credentials: true,
+}));
+
+// Better Auth endpoints
+app.on(["POST", "GET"], "/api/auth/**", (c) => {
+  return auth.handler(c.req.raw);
+});
 
 app.use(
   "/trpc/*",
