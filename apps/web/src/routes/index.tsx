@@ -1,36 +1,24 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useSession } from "../lib/auth-client";
+// import { useSession } from "../lib/auth-client";
+import { Header } from "../components/Header";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
 function HomePage() {
-  const navigate = useNavigate();
-  const { data: session, isPending } = useSession();
+  // const navigate = useNavigate();
+  // const { data: session, isPending } = useSession();
 
   // Redirect to dashboard if already logged in
-  if (session && !isPending) {
-    navigate({ to: "/dashboard" });
-    return null;
-  }
+  // if (session && !isPending) {
+  //   navigate({ to: "/dashboard" });
+  //   return null;
+  // }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* Header */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <h1 className="text-xl font-bold text-gray-900">YieldPlat</h1>
-            <Link
-              to="/login"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <Header />
 
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
@@ -102,7 +90,8 @@ function HomePage() {
               Secure & Protected
             </h3>
             <p className="text-gray-600">
-              Your deposits are safe with enterprise-grade security and insurance.
+              Your deposits are safe with enterprise-grade security and
+              insurance.
             </p>
           </div>
 
@@ -136,7 +125,7 @@ function HomePage() {
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-full shadow-sm">
             <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
             <span className="text-sm font-medium text-gray-700">
-              Full Stack: React + TanStack Router + tRPC + Better Auth + Drizzle + Neon
+              Too close for missiles, I'm switching to guns
             </span>
           </div>
         </div>

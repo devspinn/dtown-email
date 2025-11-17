@@ -1,6 +1,14 @@
-import { db } from "@yieldplat/db";
+import { createDb } from "@yieldplat/db";
 
-export const createContext = () => {
+type Env = {
+  DATABASE_URL: string;
+};
+
+export const createContext = (env?: Env) => {
+  // Use env.DATABASE_URL if available (Cloudflare Workers), otherwise fall back to process.env
+  const dbUrl = env?.DATABASE_URL || process.env.DATABASE_URL!;
+  const db = createDb(dbUrl);
+
   return {
     db,
   };

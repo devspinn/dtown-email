@@ -1,43 +1,75 @@
 import { Hono } from "hono";
-import { serve } from "@hono/node-server";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { cors } from "hono/cors";
-import { auth } from "@yieldplat/auth";
+import { createAuth } from "@yieldplat/auth";
 
-const app = new Hono();
+type Bindings = {
+  DATABASE_URL: string;
+  BETTER_AUTH_SECRET: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  BETTER_AUTH_URL: string;
+};
 
-// Enable CORS for local development
-app.use("*", cors({
-  origin: "http://localhost:3000",
-  credentials: true,
-}));
+const app = new Hono<{ Bindings: Bindings }>();
 
-// Better Auth endpoints
-app.on(["POST", "GET"], "/api/auth/**", (c) => {
-  return auth.handler(c.req.raw);
+// Enable CORS - allow both production and development origins
+app.use(
+  "*",
+  cors({
+    origin: (origin, c) => {
+      const allowedOrigins = [
+        "http://localhost:3000",
+        "https://e4b90995.yieldplat.pages.dev",
+        "https://yieldplat.pages.dev",
+        "https://yieldplat-api.devonstownsend.workers.dev",
+        "https://lh3.googleusercontent.com",
+        "https://www.birthstori.com",
+        "https://api.birthstori.com",
+        c.env?.BETTER_AUTH_URL,
+      ].filter(Boolean);
+
+      if (allowedOrigins.includes(origin)) {
+        return origin;
+      }
+      return allowedOrigins[0];
+    },
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Better Auth endpoints - catch all routes under /api/auth (including nested paths)
+app.all("/api/auth/**", async (c) => {
+  try {
+    const auth = createAuth(c.env);
+    const response = await auth.handler(c.req.raw);
+    return response;
+  } catch (error) {
+    console.error("Auth handler error:", error);
+    return c.json(
+      { error: "Auth handler failed", details: error.message },
+      500
+    );
+  }
 });
 
 app.use(
   "/trpc/*",
   trpcServer({
     router: appRouter,
-    createContext,
+    createContext: (opts, c) => {
+      return createContext(c.env);
+    },
   })
 );
 
 // Health check endpoint
 app.get("/health", (c) => c.json({ status: "ok!" }));
 
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3002;
-
-console.log(`🚀 API server running on http://localhost:${port}`);
-
-serve({
-  fetch: app.fetch,
-  port,
-});
-
+// Export for Cloudflare Workers
 export default app;
 export type { AppRouter } from "./router";

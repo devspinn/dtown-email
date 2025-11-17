@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useSession, authClient } from "../lib/auth-client";
+import { useSession } from "../lib/auth-client";
+import { Header } from "../components/Header";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
@@ -8,11 +9,6 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardPage() {
   const navigate = useNavigate();
   const { data: session, isPending } = useSession();
-
-  const handleSignOut = async () => {
-    await authClient.signOut();
-    navigate({ to: "/login" });
-  };
 
   if (isPending) {
     return (
@@ -28,33 +24,8 @@ function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <h1 className="text-xl font-bold text-gray-900">YieldPlat</h1>
-            <div className="flex items-center gap-4">
-              <div className="text-sm">
-                <div className="text-gray-900 font-medium">{session.user.name}</div>
-                <div className="text-gray-500">{session.user.email}</div>
-              </div>
-              {session.user.image && (
-                <img
-                  src={session.user.image}
-                  alt="Profile"
-                  className="w-10 h-10 rounded-full"
-                />
-              )}
-              <button
-                onClick={handleSignOut}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100">
+      <Header />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -97,7 +68,7 @@ function DashboardPage() {
             🎉 Authentication Working!
           </h3>
           <p className="text-blue-800">
-            Your auth system is fully functional. Next steps: add your fintech features!
+            Nice nice now lets go do something with it!
           </p>
         </div>
       </div>

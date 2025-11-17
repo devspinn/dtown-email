@@ -1,0 +1,21 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yieldplat-api",
+  "main": "dist/index.mjs",
+  "compatibility_date": "2024-11-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+  /**
+   * Environment Variables (non-sensitive)
+   * Sensitive vars should be set via: wrangler secret put VARIABLE_NAME
+   */
+  "vars": {
+    "BETTER_AUTH_URL": "https://api.birthstori.com"
+  }
+}
