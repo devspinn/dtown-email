@@ -36,7 +36,6 @@ export function createAuth(env: Env) {
       "https://yieldplat.pages.dev",
       "https://yieldplat-api.devonstownsend.workers.dev",
       "https://www.birthstori.com",
-      "https://api.birthstori.com",
       env.BETTER_AUTH_URL,
     ],
     advanced: {
