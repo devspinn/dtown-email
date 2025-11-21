@@ -1,20 +1,21 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
 import { useState } from "react";
 import { Header } from "@/components/Header";
+import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,18 +24,28 @@ function LoginPage() {
 
     try {
       if (isSignUp) {
-        await authClient.signUp.email({
+        const result = await authClient.signUp.email({
           email,
           password,
           name,
         });
+        if (result.error) {
+          setError(result.error.message || "Something went wrong");
+        } else {
+          // TODO: use callbackURL: '/dashboard' to redirect after email confirmation
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          navigate({ to: "/dashboard" });
+        }
       } else {
-        await authClient.signIn.email({
+        const result = await authClient.signIn.email({
           email,
           password,
+          callbackURL: "/dashboard",
         });
+        if (result.error) {
+          setError(result.error.message || "Something went wrong");
+        }
       }
-      navigate({ to: "/dashboard" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {

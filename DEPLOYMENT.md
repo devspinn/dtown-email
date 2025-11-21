@@ -154,8 +154,8 @@ Once you have a custom domain:
 
 1. Add it to Cloudflare Pages
 2. Update all URLs to use your domain:
-   - `https://api.yourdomain.com` for the Worker
-   - `https://yourdomain.com` for the Pages app
+   - `https://www.yourdomain.com/api` for the Worker
+   - `https://www.yourdomain.com` for the Pages app
 3. Update Google OAuth redirect URIs
 4. Update environment variables
 

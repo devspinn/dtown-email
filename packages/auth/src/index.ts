@@ -32,6 +32,7 @@ export function createAuth(env: Env) {
     },
     trustedOrigins: [
       "http://localhost:3000",
+      "http://localhost:3002",
       "https://e4b90995.yieldplat.pages.dev",
       "https://yieldplat.pages.dev",
       "https://yieldplat-api.devonstownsend.workers.dev",
