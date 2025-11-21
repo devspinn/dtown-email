@@ -7,6 +7,6 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 3002;
 console.log(`🚀 API server running on http://localhost:${port}`);
 
 serve({
-  fetch: app.fetch,
+  fetch: (req) => app.fetch(req, process.env),
   port,
 });

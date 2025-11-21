@@ -38,19 +38,18 @@ export function createAuth(env: Env) {
       "https://www.birthstori.com",
       env.BETTER_AUTH_URL,
     ],
-    advanced: {
-      useSecureCookies: true,
-      cookieOptions: {
-        sameSite: "lax",
-        secure: true,
-        domain: env.BETTER_AUTH_URL.includes("birthstori.com")
-          ? ".birthstori.com"
-          : undefined,
-      },
-    },
+    // advanced: {
+    //   useSecureCookies: true,
+    //   cookieOptions: {
+    //     sameSite: "lax",
+    //     secure: true,
+    //     domain: env.BETTER_AUTH_URL.includes("birthstori.com")
+    //       ? ".birthstori.com"
+    //       : undefined,
+    //   },
+    // },
   });
 }
-
 // For development with process.env
 export const auth = createAuth({
   DATABASE_URL: process.env.DATABASE_URL!,

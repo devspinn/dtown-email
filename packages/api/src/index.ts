@@ -43,14 +43,14 @@ app.use(
 );
 
 // Better Auth endpoints - catch all routes under /api/auth (including nested paths)
-app.all("/api/auth/**", async (c) => {
+app.all("/api/auth/**", async (context) => {
   try {
-    const auth = createAuth(c.env);
-    const response = await auth.handler(c.req.raw);
+    const auth = createAuth(context.env);
+    const response = await auth.handler(context.req.raw);
     return response;
   } catch (error) {
     console.error("Auth handler error:", error);
-    return c.json(
+    return context.json(
       { error: "Auth handler failed", details: error.message },
       500
     );

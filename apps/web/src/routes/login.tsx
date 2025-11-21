@@ -47,11 +47,9 @@ function LoginPage() {
     setLoading(true);
     try {
       // Use full URL for callback to redirect back to frontend domain
-      const callbackURL =
-        import.meta.env.PROD
-          ? "https://www.birthstori.com/dashboard"
-          : `${window.location.origin}/dashboard`;
-
+      const callbackURL = import.meta.env.PROD
+        ? "https://www.birthstori.com/dashboard"
+        : `${window.location.origin}/dashboard`;
       await authClient.signIn.social({
         provider: "google",
         callbackURL,
