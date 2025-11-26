@@ -33,8 +33,7 @@ export function createAuth(env: Env) {
     trustedOrigins: [
       "http://localhost:3000",
       "http://localhost:3002",
-      "https://e4b90995.dtown-email.pages.dev",
-      "https://dtown-email.pages.dev",
+      "https://dtown-email-web.pages.dev",
       "https://dtown-email-api.devonstownsend.workers.dev",
       "https://www.bddbapp.com",
       env.BETTER_AUTH_URL,

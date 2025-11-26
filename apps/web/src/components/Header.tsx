@@ -18,7 +18,7 @@ export function Header() {
             <h1 className="text-xl font-bold text-gray-900">dtown-email</h1>
           </Link>
 
-          {session ? (
+          {session && session.user ? (
             // Authenticated state
             <div className="flex items-center gap-4">
               <div className="text-sm">

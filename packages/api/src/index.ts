@@ -22,8 +22,8 @@ app.use(
     origin: (origin, c) => {
       const allowedOrigins = [
         "http://localhost:3000",
-        "https://e4b90995.dtown-email.pages.dev",
-        "https://dtown-email.pages.dev",
+        "https://e4b90995.dtown-email-web.pages.dev",
+        "https://dtown-email-web.pages.dev",
         "https://dtown-email-api.devonstownsend.workers.dev",
         "https://lh3.googleusercontent.com",
         "https://www.bddbapp.com",
