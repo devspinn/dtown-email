@@ -1,5 +1,5 @@
 {
-  "name": "yieldplat",
+  "name": "dtown-email",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -7,9 +7,10 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "db:push": "dotenvx run -- pnpm --filter @yieldplat/db run db:push",
-    "db:studio": "dotenvx run -- pnpm --filter @yieldplat/db run db:studio",
-    "db:generate": "dotenvx run -- pnpm --filter @yieldplat/db run db:generate"
+    "deploy": "turbo run deploy --filter=@dtown-email/api --filter=@dtown-email/web",
+    "db:push": "dotenvx run -- pnpm --filter @dtown-email/db run db:push",
+    "db:studio": "dotenvx run -- pnpm --filter @dtown-email/db run db:studio",
+    "db:generate": "dotenvx run -- pnpm --filter @dtown-email/db run db:generate"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.51.1",

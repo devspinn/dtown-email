@@ -11,8 +11,8 @@ export default defineConfig({
   minify: false,
   external: ["@hono/node-server"],
   noExternal: [
-    "@yieldplat/auth",
-    "@yieldplat/db",
+    "@dtown-email/auth",
+    "@dtown-email/db",
     "better-auth",
     "drizzle-orm",
     "@neondatabase/serverless",

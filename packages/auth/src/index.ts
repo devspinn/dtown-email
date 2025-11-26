@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createDb } from "@yieldplat/db";
+import { createDb } from "@dtown-email/db";
 
 type Env = {
   DATABASE_URL: string;
@@ -33,10 +33,10 @@ export function createAuth(env: Env) {
     trustedOrigins: [
       "http://localhost:3000",
       "http://localhost:3002",
-      "https://e4b90995.yieldplat.pages.dev",
-      "https://yieldplat.pages.dev",
-      "https://yieldplat-api.devonstownsend.workers.dev",
-      "https://www.birthstori.com",
+      "https://e4b90995.dtown-email.pages.dev",
+      "https://dtown-email.pages.dev",
+      "https://dtown-email-api.devonstownsend.workers.dev",
+      "https://www.bddbapp.com",
       env.BETTER_AUTH_URL,
     ],
     // advanced: {
@@ -44,8 +44,8 @@ export function createAuth(env: Env) {
     //   cookieOptions: {
     //     sameSite: "lax",
     //     secure: true,
-    //     domain: env.BETTER_AUTH_URL.includes("birthstori.com")
-    //       ? ".birthstori.com"
+    //     domain: env.BETTER_AUTH_URL.includes("bddbapp.com")
+    //       ? ".bddbapp.com"
     //       : undefined,
     //   },
     // },

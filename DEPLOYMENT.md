@@ -26,7 +26,7 @@ This will:
 
 - Build your API
 - Deploy to Cloudflare Workers
-- Give you a URL like: `https://yieldplat-api.devonstownsend.workers.dev`
+- Give you a URL like: `https://dtown-email-api.devonstownsend.workers.dev`
 
 ### 1.2 Set Environment Variables
 
@@ -56,13 +56,13 @@ After deploying, copy your Worker URL and update these files:
 **apps/web/src/lib/trpc.ts** (line 12):
 
 ```typescript
-return "https://yieldplat-api.YOUR_ACTUAL_SUBDOMAIN.workers.dev/trpc";
+return "https://dtown-email-api.YOUR_ACTUAL_SUBDOMAIN.workers.dev/trpc";
 ```
 
 **apps/web/src/lib/auth-client.ts** (line 7):
 
 ```typescript
-return "https://yieldplat-api.YOUR_ACTUAL_SUBDOMAIN.workers.dev";
+return "https://dtown-email-api.YOUR_ACTUAL_SUBDOMAIN.workers.dev";
 ```
 
 **packages/api/wrangler.toml** (line 14):
@@ -79,7 +79,7 @@ Option A: Via Dashboard (Recommended for first time)
 3. Click "Create Application" → "Pages" → "Connect to Git"
 4. Connect your GitHub repo
 5. Set build settings:
-   - Build command: `pnpm install && pnpm --filter @yieldplat/web run build`
+   - Build command: `pnpm install && pnpm --filter @dtown-email/web run build`
    - Build output directory: `apps/web/dist`
    - Root directory: `/` (leave as default)
 
@@ -88,23 +88,23 @@ Option B: Via CLI
 ```bash
 cd apps/web
 pnpm run build
-wrangler pages deploy dist --project-name yieldplat
+wrangler pages deploy dist --project-name dtown-email
 ```
 
 ### 2.2 Update Better Auth URLs
 
-After deployment, you'll get a URL like: `https://yieldplat.pages.dev`
+After deployment, you'll get a URL like: `https://dtown-email.pages.dev`
 
 Update **packages/auth/src/index.ts** (line 9):
 
 ```typescript
-baseURL: process.env.BETTER_AUTH_URL || "https://yieldplat.pages.dev",
+baseURL: process.env.BETTER_AUTH_URL || "https://dtown-email.pages.dev",
 ```
 
 Update **packages/api/wrangler.toml** (line 14):
 
 ```
-BETTER_AUTH_URL = "https://yieldplat.pages.dev"
+BETTER_AUTH_URL = "https://dtown-email.pages.dev"
 ```
 
 Then redeploy the API:
@@ -120,12 +120,12 @@ Go to https://console.cloud.google.com/apis/credentials
 
 Add these authorized redirect URIs:
 
-- Production: `https://yieldplat-api.devonstownsend.workers.dev/api/auth/callback/google`
+- Production: `https://dtown-email-api.devonstownsend.workers.dev/api/auth/callback/google`
 - Development: `http://localhost:3000/api/auth/callback/google` (keep this)
 
 ## Step 3: Test Your Deployment
 
-1. Visit your Pages URL: `https://yieldplat.pages.dev`
+1. Visit your Pages URL: `https://dtown-email.pages.dev`
 2. Try signing up with email/password
 3. Try signing in with Google
 4. Check that the dashboard loads
@@ -165,10 +165,10 @@ Local dev still works the same:
 
 ```bash
 # Terminal 1
-pnpm --filter @yieldplat/api run dev
+pnpm --filter @dtown-email/api run dev
 
 # Terminal 2
-pnpm --filter @yieldplat/web run dev
+pnpm --filter @dtown-email/web run dev
 ```
 
 The Vite proxy handles routing `/api/*` to `localhost:3002` in development.

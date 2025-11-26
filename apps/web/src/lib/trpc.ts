@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink } from "@trpc/client";
-import type { AppRouter } from "@yieldplat/api";
+import type { AppRouter } from "@dtown-email/api";
 
 // Create tRPC React hooks
 export const trpc = createTRPCReact<AppRouter>();

@@ -1,4 +1,4 @@
-import { createDb } from "@yieldplat/db";
+import { createDb } from "@dtown-email/db";
 
 type Env = {
   DATABASE_URL: string;

@@ -3,7 +3,7 @@ import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { cors } from "hono/cors";
-import { createAuth } from "@yieldplat/auth";
+import { createAuth } from "@dtown-email/auth";
 
 type Bindings = {
   DATABASE_URL: string;
@@ -22,12 +22,12 @@ app.use(
     origin: (origin, c) => {
       const allowedOrigins = [
         "http://localhost:3000",
-        "https://e4b90995.yieldplat.pages.dev",
-        "https://yieldplat.pages.dev",
-        "https://yieldplat-api.devonstownsend.workers.dev",
+        "https://e4b90995.dtown-email.pages.dev",
+        "https://dtown-email.pages.dev",
+        "https://dtown-email-api.devonstownsend.workers.dev",
         "https://lh3.googleusercontent.com",
-        "https://www.birthstori.com",
-        "https://api.birthstori.com",
+        "https://www.bddbapp.com",
+        "https://api.bddbapp.com",
         c.env?.BETTER_AUTH_URL,
       ].filter(Boolean);
 

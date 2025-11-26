@@ -59,7 +59,7 @@ function LoginPage() {
     try {
       // Use full URL for callback to redirect back to frontend domain
       const callbackURL = import.meta.env.PROD
-        ? "https://www.birthstori.com/dashboard"
+        ? "https://www.bddbapp.com/dashboard"
         : `${window.location.origin}/dashboard`;
       await authClient.signIn.social({
         provider: "google",
@@ -81,8 +81,8 @@ function LoginPage() {
           </h1>
           <p className="text-gray-600 mb-6">
             {isSignUp
-              ? "Sign up to get started with YieldPlat"
-              : "Sign in to your YieldPlat account"}
+              ? "Sign up to get started with dtown-email"
+              : "Sign in to your dtown-email account"}
           </p>
 
           {error && (

@@ -1,7 +1,7 @@
 import { initTRPC } from "@trpc/server";
 import { z } from "zod";
 import { type Context } from "./context";
-import { schema } from "@yieldplat/db";
+import { schema } from "@dtown-email/db";
 
 const t = initTRPC.context<Context>().create();
 
