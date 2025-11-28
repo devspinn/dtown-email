@@ -8,12 +8,15 @@
     "deploy": "pnpm run build && wrangler deploy"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "@dtown-email/auth": "workspace:*",
+    "@dtown-email/db": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@hono/trpc-server": "^0.4.0",
     "@trpc/server": "^11.7.1",
-    "@dtown-email/auth": "workspace:*",
-    "@dtown-email/db": "workspace:*",
+    "googleapis": "^166.0.0",
     "hono": "^4.10.5",
+    "html-to-text": "^9.0.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {

@@ -13,4 +13,20 @@ export const db = createDb(process.env.DATABASE_URL!);
 
 // Export schema and types
 export { schema };
-export type { User, NewUser } from "./schema";
+export type {
+  User,
+  NewUser,
+  Session,
+  Account,
+  EmailAccount,
+  NewEmailAccount,
+  Rule,
+  NewRule,
+  Email,
+  NewEmail,
+  ProcessedEmail,
+  NewProcessedEmail,
+} from "./schema";
+
+// Re-export commonly used drizzle-orm query functions
+export { eq, and, or, desc, asc, like, ilike, sql } from "drizzle-orm";

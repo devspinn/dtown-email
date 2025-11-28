@@ -64,8 +64,96 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updatedAt").defaultNow(),
 });
 
+// Email Accounts table - stores connected Gmail accounts
+export const emailAccount = pgTable("email_account", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  provider: text("provider").notNull().default("gmail"), // 'gmail' for now
+  accessToken: text("accessToken"), // Encrypted in production
+  refreshToken: text("refreshToken"), // Encrypted in production
+  tokenExpiresAt: timestamp("tokenExpiresAt"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  historyId: text("historyId"), // Gmail history ID for incremental sync
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+// Email Rules table - user-defined AI filtering rules
+export const rule = pgTable("rule", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // e.g., "Cold Sales Filter"
+  description: text("description"), // User's natural language description
+  systemPrompt: text("systemPrompt").notNull(), // The actual prompt sent to Claude
+  actionType: text("actionType").notNull(), // "ARCHIVE", "LABEL", "DELETE", "MOVE"
+  actionValue: text("actionValue"), // Label name or folder ID
+  isActive: boolean("isActive").notNull().default(true),
+  priority: integer("priority").notNull().default(0), // Order of rule execution
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+// Emails table - cached emails for faster access and search
+export const email = pgTable("email", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  gmailMessageId: text("gmailMessageId").notNull().unique(), // Gmail's message ID
+  emailAccountId: text("emailAccountId")
+    .notNull()
+    .references(() => emailAccount.id, { onDelete: "cascade" }),
+  threadId: text("threadId"),
+  from: text("from").notNull(),
+  to: text("to"),
+  subject: text("subject"),
+  snippet: text("snippet"), // Preview text
+  bodyText: text("bodyText"), // Plain text body for AI processing
+  bodyHtml: text("bodyHtml"), // HTML body for display
+  labelIds: text("labelIds"), // JSON array of Gmail labels
+  receivedAt: timestamp("receivedAt").notNull(),
+  isRead: boolean("isRead").notNull().default(false),
+  isStarred: boolean("isStarred").notNull().default(false),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+});
+
+// Processed Emails table - audit trail of rule executions
+export const processedEmail = pgTable("processed_email", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  emailId: text("emailId")
+    .notNull()
+    .references(() => email.id, { onDelete: "cascade" }),
+  ruleId: text("ruleId")
+    .notNull()
+    .references(() => rule.id, { onDelete: "cascade" }),
+  matched: boolean("matched").notNull(),
+  confidence: integer("confidence"), // 0-100
+  actionTaken: text("actionTaken"), // What action was performed
+  llmResponse: text("llmResponse"), // Full LLM response for debugging
+  processedAt: timestamp("processedAt").notNull().defaultNow(),
+});
+
 // Type exports for use in the application
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
 export type Session = typeof session.$inferSelect;
 export type Account = typeof account.$inferSelect;
+export type EmailAccount = typeof emailAccount.$inferSelect;
+export type NewEmailAccount = typeof emailAccount.$inferInsert;
+export type Rule = typeof rule.$inferSelect;
+export type NewRule = typeof rule.$inferInsert;
+export type Email = typeof email.$inferSelect;
+export type NewEmail = typeof email.$inferInsert;
+export type ProcessedEmail = typeof processedEmail.$inferSelect;
+export type NewProcessedEmail = typeof processedEmail.$inferInsert;
