@@ -27,13 +27,6 @@ export function Header() {
                 </div>
                 <div className="text-gray-500">{session.user.email}</div>
               </div>
-              {session.user.image && (
-                <img
-                  src={session.user.image}
-                  alt="Profile"
-                  className="w-10 h-10 rounded-full"
-                />
-              )}
               <button
                 onClick={handleSignOut}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium"

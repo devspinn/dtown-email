@@ -114,11 +114,9 @@ Does this email match the rule? Respond with JSON only.`,
    * Generate a system prompt from a user's natural language rule description
    * This helps users create rules in plain English
    */
-  async generateSystemPrompt(
-    userDescription: string
-  ): Promise<string> {
+  async generateSystemPrompt(userDescription: string): Promise<string> {
     const response = await this.anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022", // Use Sonnet for better instruction following
+      model: "claude-sonnet-4-5-20250929", // Use Sonnet for better instruction following
       max_tokens: 500,
       temperature: 0.3,
       system: `You are a prompt engineer. Convert user's natural language email filtering rules into precise system prompts for an AI email classifier.

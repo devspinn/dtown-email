@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-// import { useSession } from "../lib/auth-client";
+import { useSession } from "../lib/auth-client";
 import { Header } from "../components/Header";
 
 export const Route = createFileRoute("/")({
@@ -7,14 +7,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  // const navigate = useNavigate();
-  // const { data: session, isPending } = useSession();
-
-  // Redirect to dashboard if already logged in
-  // if (session && !isPending) {
-  //   navigate({ to: "/dashboard" });
-  //   return null;
-  // }
+  const { data: session } = useSession();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -33,10 +26,10 @@ function HomePage() {
           </p>
           <div className="flex gap-4 justify-center">
             <Link
-              to="/login"
+              to={session ? "/dashboard" : "/login"}
               className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-lg font-medium transition-colors"
             >
-              Get Started
+              {session ? "Dashboard" : "Get Started"}
             </Link>
             <a
               href="https://github.com/devspinn/dtown-email"

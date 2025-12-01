@@ -57,15 +57,16 @@ app.all("/api/auth/**", async (context) => {
   }
 });
 
-app.use(
-  "/trpc/*",
-  trpcServer({
+// tRPC endpoints - using a specific path pattern for proper routing
+app.all("/api/trpc/*", async (c) => {
+  return trpcServer({
     router: appRouter,
-    createContext: (opts, c) => {
+    createContext: (opts) => {
       return createContext(c.env);
     },
-  })
-);
+    endpoint: "/api/trpc",
+  })(c);
+});
 
 // Health check endpoint
 app.get("/health", (c) => c.json({ status: "ok!" }));
