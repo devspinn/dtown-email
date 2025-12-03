@@ -3,6 +3,7 @@ import { useSession } from "../lib/auth-client";
 import { Header } from "../components/Header";
 import { useState } from "react";
 import { trpc } from "../lib/trpc";
+import { RuleTestModal } from "../components/RuleTestModal";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
@@ -89,6 +90,8 @@ function DashboardPage() {
   >("ARCHIVE_AND_LABEL");
   const [newRuleLabel, setNewRuleLabel] = useState("");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
+  const [testingRuleName, setTestingRuleName] = useState<string>("");
 
   const utils = trpc.useUtils();
 
@@ -385,6 +388,15 @@ function DashboardPage() {
 
                   <div className="flex items-center gap-2 ml-4">
                     <button
+                      onClick={() => {
+                        setTestingRuleId(rule.id);
+                        setTestingRuleName(rule.name);
+                      }}
+                      className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium text-sm transition-colors"
+                    >
+                      Test Rule
+                    </button>
+                    <button
                       onClick={() =>
                         updateRuleMutation.mutate({
                           id: rule.id,
@@ -454,6 +466,18 @@ function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Test Rule Modal */}
+        {testingRuleId && (
+          <RuleTestModal
+            ruleId={testingRuleId}
+            ruleName={testingRuleName}
+            onClose={() => {
+              setTestingRuleId(null);
+              setTestingRuleName("");
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,11 +1,20 @@
 import { initTRPC } from "@trpc/server";
 import { z } from "zod";
 import { type Context } from "./context";
-import { schema, eq, and, desc } from "@dtown-email/db";
+import { schema, eq, desc } from "@dtown-email/db";
 import { EmailProcessor } from "./services/processor";
 import { AIService } from "./services/ai";
 
-const t = initTRPC.context<Context>().create();
+const t = initTRPC.context<Context>().create({
+  errorFormatter({ shape, error }) {
+    console.error("❌ tRPC Error:", {
+      path: shape.data.path,
+      code: error.code,
+      message: error.message,
+    });
+    return shape;
+  },
+});
 
 export const appRouter = t.router({
   hello: t.procedure
@@ -92,7 +101,12 @@ export const appRouter = t.router({
           name: z.string(),
           description: z.string().optional(),
           systemPrompt: z.string(),
-          actionType: z.enum(["ARCHIVE", "LABEL", "DELETE", "ARCHIVE_AND_LABEL"]),
+          actionType: z.enum([
+            "ARCHIVE",
+            "LABEL",
+            "DELETE",
+            "ARCHIVE_AND_LABEL",
+          ]),
           actionValue: z.string().optional(),
           priority: z.number().default(0),
         })
@@ -112,7 +126,9 @@ export const appRouter = t.router({
           name: z.string().optional(),
           description: z.string().optional(),
           systemPrompt: z.string().optional(),
-          actionType: z.enum(["ARCHIVE", "LABEL", "DELETE", "ARCHIVE_AND_LABEL"]).optional(),
+          actionType: z
+            .enum(["ARCHIVE", "LABEL", "DELETE", "ARCHIVE_AND_LABEL"])
+            .optional(),
           actionValue: z.string().optional(),
           isActive: z.boolean().optional(),
           priority: z.number().optional(),
@@ -140,8 +156,288 @@ export const appRouter = t.router({
       .input(z.object({ description: z.string() }))
       .mutation(async ({ input }) => {
         const aiService = new AIService();
-        const systemPrompt = await aiService.generateSystemPrompt(input.description);
+        const systemPrompt = await aiService.generateSystemPrompt(
+          input.description
+        );
         return { systemPrompt };
+      }),
+
+    // Test a rule against recent emails
+    test: t.procedure
+      .input(
+        z.object({
+          ruleId: z.string(),
+          limit: z.number().default(20),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        console.log("\n🧪 ========== STARTING RULE TEST ==========");
+        console.log(`📋 Rule ID: ${input.ruleId}`);
+        console.log(`📊 Testing limit: ${input.limit} emails`);
+
+        const aiService = new AIService();
+
+        // Fetch the rule
+        const [rule] = await ctx.db
+          .select()
+          .from(schema.rule)
+          .where(eq(schema.rule.id, input.ruleId))
+          .limit(1);
+
+        if (!rule) {
+          console.error("❌ Rule not found");
+          throw new Error("Rule not found");
+        }
+
+        console.log(`✅ Found rule: "${rule.name}"`);
+        console.log(`📝 System prompt: ${rule.systemPrompt.substring(0, 100)}...`);
+
+        // Fetch recent emails for this user's email accounts
+        const emailAccounts = await ctx.db
+          .select()
+          .from(schema.emailAccount)
+          .where(eq(schema.emailAccount.userId, rule.userId))
+          .limit(1);
+
+        if (emailAccounts.length === 0) {
+          console.warn("⚠️  No email accounts found for user");
+          return { results: [], matchCount: 0, total: 0 };
+        }
+
+        console.log(`📧 Email account: ${emailAccounts[0].email}`);
+
+        // Get recent emails from the database
+        const recentEmails = await ctx.db
+          .select()
+          .from(schema.email)
+          .where(eq(schema.email.emailAccountId, emailAccounts[0].id))
+          .orderBy(desc(schema.email.receivedAt))
+          .limit(input.limit);
+
+        if (recentEmails.length === 0) {
+          console.warn("⚠️  No emails found in database");
+          return { results: [], matchCount: 0, total: 0 };
+        }
+
+        console.log(`\n📬 Fetched ${recentEmails.length} emails from database`);
+        console.log("🤖 Starting AI classification...\n");
+
+        // Test each email against the rule
+        let processedCount = 0;
+        const results = await Promise.all(
+          recentEmails.map(async (email, index) => {
+            const emailNum = index + 1;
+            console.log(`[${emailNum}/${recentEmails.length}] 🔍 Classifying:`);
+            console.log(`    From: ${email.from}`);
+            console.log(`    Subject: ${email.subject}`);
+
+            try {
+              const startTime = Date.now();
+              const classification = await aiService.classifyEmail(
+                email.bodyText || email.snippet || "",
+                {
+                  id: rule.id,
+                  name: rule.name,
+                  systemPrompt: rule.systemPrompt,
+                  actionType: rule.actionType,
+                  actionValue: rule.actionValue,
+                }
+              );
+              const duration = Date.now() - startTime;
+
+              if (classification.matched) {
+                console.log(`    ✅ MATCH (${classification.confidence}% confidence, ${duration}ms)`);
+                console.log(`    💡 Reasoning: ${classification.reasoning}`);
+              } else {
+                console.log(`    ⚪ No match (${duration}ms)`);
+                if (classification.reasoning) {
+                  console.log(`    💭 Reasoning: ${classification.reasoning}`);
+                }
+              }
+
+              processedCount++;
+              return {
+                email: {
+                  id: email.id,
+                  gmailMessageId: email.gmailMessageId,
+                  from: email.from,
+                  subject: email.subject,
+                  snippet: email.snippet,
+                  receivedAt: email.receivedAt,
+                },
+                matched: classification.matched,
+                confidence: classification.confidence,
+                reasoning: classification.reasoning,
+                error: null,
+              };
+            } catch (error) {
+              console.error(`    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`);
+              processedCount++;
+              return {
+                email: {
+                  id: email.id,
+                  gmailMessageId: email.gmailMessageId,
+                  from: email.from,
+                  subject: email.subject,
+                  snippet: email.snippet,
+                  receivedAt: email.receivedAt,
+                },
+                matched: false,
+                confidence: 0,
+                reasoning: null,
+                error: error instanceof Error ? error.message : "Classification failed",
+              };
+            }
+          })
+        );
+
+        const matchCount = results.filter((r) => r.matched).length;
+
+        console.log("\n📊 ========== TEST COMPLETE ==========");
+        console.log(`✅ Processed: ${processedCount}/${recentEmails.length} emails`);
+        console.log(`🎯 Matches: ${matchCount}`);
+        console.log(`⚪ Non-matches: ${results.length - matchCount}`);
+        console.log(`📈 Match rate: ${((matchCount / results.length) * 100).toFixed(1)}%`);
+        console.log("========================================\n");
+
+        return {
+          results,
+          matchCount,
+          total: recentEmails.length,
+          rule: {
+            id: rule.id,
+            name: rule.name,
+            actionType: rule.actionType,
+            actionValue: rule.actionValue,
+          },
+        };
+      }),
+
+    // Apply a rule to specific emails
+    applyToEmails: t.procedure
+      .input(
+        z.object({
+          ruleId: z.string(),
+          emailIds: z.array(z.string()),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        console.log("\n⚡ ========== APPLYING RULE TO EMAILS ==========");
+        console.log(`📋 Rule ID: ${input.ruleId}`);
+        console.log(`📧 Number of emails: ${input.emailIds.length}`);
+
+        const processor = new EmailProcessor();
+
+        // Fetch the rule
+        const [rule] = await ctx.db
+          .select()
+          .from(schema.rule)
+          .where(eq(schema.rule.id, input.ruleId))
+          .limit(1);
+
+        if (!rule) {
+          console.error("❌ Rule not found");
+          throw new Error("Rule not found");
+        }
+
+        console.log(`✅ Found rule: "${rule.name}"`);
+        console.log(`🎯 Action: ${rule.actionType}${rule.actionValue ? ` (${rule.actionValue})` : ""}`);
+
+        // Fetch email account for Gmail service
+        const emailAccounts = await ctx.db
+          .select()
+          .from(schema.emailAccount)
+          .where(eq(schema.emailAccount.userId, rule.userId))
+          .limit(1);
+
+        if (emailAccounts.length === 0) {
+          console.error("❌ No email account found");
+          throw new Error("No email account found");
+        }
+
+        const emailAccount = emailAccounts[0];
+        console.log(`📬 Email account: ${emailAccount.email}`);
+
+        let processed = 0;
+
+        // Import GmailService here
+        const { GmailService } = await import("./services/gmail");
+
+        const gmailService = new GmailService({
+          accessToken: emailAccount.accessToken!,
+          refreshToken: emailAccount.refreshToken!,
+          expiryDate: emailAccount.tokenExpiresAt?.getTime(),
+        });
+
+        console.log("\n🚀 Processing emails...\n");
+
+        // Process each email
+        for (let i = 0; i < input.emailIds.length; i++) {
+          const emailId = input.emailIds[i];
+          console.log(`[${i + 1}/${input.emailIds.length}] Processing email ID: ${emailId}`);
+
+          try {
+            const [email] = await ctx.db
+              .select()
+              .from(schema.email)
+              .where(eq(schema.email.id, emailId))
+              .limit(1);
+
+            if (!email) {
+              console.warn(`    ⚠️  Email not found in database, skipping`);
+              continue;
+            }
+
+            console.log(`    From: ${email.from}`);
+            console.log(`    Subject: ${email.subject}`);
+
+            const startTime = Date.now();
+
+            // Execute the action based on rule type
+            switch (rule.actionType) {
+              case "ARCHIVE":
+                await gmailService.archiveEmail(email.gmailMessageId);
+                console.log(`    ✅ Archived (${Date.now() - startTime}ms)`);
+                break;
+              case "LABEL":
+                if (rule.actionValue) {
+                  await gmailService.addLabel(
+                    email.gmailMessageId,
+                    rule.actionValue
+                  );
+                  console.log(`    ✅ Added label "${rule.actionValue}" (${Date.now() - startTime}ms)`);
+                }
+                break;
+              case "ARCHIVE_AND_LABEL":
+                if (rule.actionValue) {
+                  await gmailService.addLabel(
+                    email.gmailMessageId,
+                    rule.actionValue
+                  );
+                }
+                await gmailService.archiveEmail(email.gmailMessageId);
+                console.log(`    ✅ Archived and labeled "${rule.actionValue}" (${Date.now() - startTime}ms)`);
+                break;
+              case "DELETE":
+                await gmailService.deleteEmail(email.gmailMessageId);
+                console.log(`    ✅ Deleted (${Date.now() - startTime}ms)`);
+                break;
+            }
+
+            processed++;
+          } catch (error) {
+            console.error(`    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`);
+          }
+        }
+
+        console.log("\n📊 ========== APPLY COMPLETE ==========");
+        console.log(`✅ Successfully processed: ${processed}/${input.emailIds.length} emails`);
+        if (processed < input.emailIds.length) {
+          console.log(`⚠️  Failed: ${input.emailIds.length - processed}`);
+        }
+        console.log("========================================\n");
+
+        return { success: true, processed };
       }),
   }),
 
@@ -189,7 +485,10 @@ export const appRouter = t.router({
       )
       .mutation(async ({ input }) => {
         const processor = new EmailProcessor();
-        await processor.processUserEmails(input.userId, input.maxEmailsPerAccount);
+        await processor.processUserEmails(
+          input.userId,
+          input.maxEmailsPerAccount
+        );
         return { success: true, message: "Email processing started" };
       }),
   }),
@@ -226,8 +525,14 @@ export const appRouter = t.router({
             rule: schema.rule,
           })
           .from(schema.processedEmail)
-          .innerJoin(schema.email, eq(schema.processedEmail.emailId, schema.email.id))
-          .innerJoin(schema.rule, eq(schema.processedEmail.ruleId, schema.rule.id))
+          .innerJoin(
+            schema.email,
+            eq(schema.processedEmail.emailId, schema.email.id)
+          )
+          .innerJoin(
+            schema.rule,
+            eq(schema.processedEmail.ruleId, schema.rule.id)
+          )
           .where(eq(schema.rule.userId, input.userId))
           .orderBy(desc(schema.processedEmail.processedAt))
           .limit(input.limit);

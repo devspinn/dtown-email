@@ -30,3 +30,6 @@ export type {
 
 // Re-export commonly used drizzle-orm query functions
 export { eq, and, or, desc, asc, like, ilike, sql } from "drizzle-orm";
+
+// Re-export createId for other packages to use
+export { createId } from "@paralleldrive/cuid2";
