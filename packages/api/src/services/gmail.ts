@@ -49,7 +49,7 @@ export class GmailService {
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults,
-      q: "in:inbox", // Only inbox for now
+      q: "in:inbox category:primary", // Only inbox for now
     });
 
     const messages = listResponse.data.messages || [];

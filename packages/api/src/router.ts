@@ -190,7 +190,9 @@ export const appRouter = t.router({
         }
 
         console.log(`✅ Found rule: "${rule.name}"`);
-        console.log(`📝 System prompt: ${rule.systemPrompt.substring(0, 100)}...`);
+        console.log(
+          `📝 System prompt: ${rule.systemPrompt.substring(0, 100)}...`
+        );
 
         // Fetch recent emails for this user's email accounts
         const emailAccounts = await ctx.db
@@ -206,7 +208,19 @@ export const appRouter = t.router({
 
         console.log(`📧 Email account: ${emailAccounts[0].email}`);
 
-        // Get recent emails from the database
+        // Always sync latest emails from Gmail before testing
+        console.log(`📥 Syncing latest ${input.limit} emails from Gmail...`);
+        const processor = new EmailProcessor();
+
+        try {
+          const syncCount = await processor.syncEmails(emailAccounts[0], input.limit);
+          console.log(`✅ Synced ${syncCount} new emails from Gmail`);
+        } catch (error) {
+          console.error("❌ Failed to sync emails:", error);
+          throw new Error("Failed to sync emails from Gmail");
+        }
+
+        // Get recent emails from the database (after sync)
         const recentEmails = await ctx.db
           .select()
           .from(schema.email)
@@ -215,11 +229,11 @@ export const appRouter = t.router({
           .limit(input.limit);
 
         if (recentEmails.length === 0) {
-          console.warn("⚠️  No emails found in database");
+          console.error("❌ No emails found after sync");
           return { results: [], matchCount: 0, total: 0 };
         }
 
-        console.log(`\n📬 Fetched ${recentEmails.length} emails from database`);
+        console.log(`\n📬 Testing against ${recentEmails.length} emails from database`);
         console.log("🤖 Starting AI classification...\n");
 
         // Test each email against the rule
@@ -246,7 +260,9 @@ export const appRouter = t.router({
               const duration = Date.now() - startTime;
 
               if (classification.matched) {
-                console.log(`    ✅ MATCH (${classification.confidence}% confidence, ${duration}ms)`);
+                console.log(
+                  `    ✅ MATCH (${classification.confidence}% confidence, ${duration}ms)`
+                );
                 console.log(`    💡 Reasoning: ${classification.reasoning}`);
               } else {
                 console.log(`    ⚪ No match (${duration}ms)`);
@@ -271,7 +287,9 @@ export const appRouter = t.router({
                 error: null,
               };
             } catch (error) {
-              console.error(`    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`);
+              console.error(
+                `    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`
+              );
               processedCount++;
               return {
                 email: {
@@ -285,7 +303,10 @@ export const appRouter = t.router({
                 matched: false,
                 confidence: 0,
                 reasoning: null,
-                error: error instanceof Error ? error.message : "Classification failed",
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Classification failed",
               };
             }
           })
@@ -294,10 +315,14 @@ export const appRouter = t.router({
         const matchCount = results.filter((r) => r.matched).length;
 
         console.log("\n📊 ========== TEST COMPLETE ==========");
-        console.log(`✅ Processed: ${processedCount}/${recentEmails.length} emails`);
+        console.log(
+          `✅ Processed: ${processedCount}/${recentEmails.length} emails`
+        );
         console.log(`🎯 Matches: ${matchCount}`);
         console.log(`⚪ Non-matches: ${results.length - matchCount}`);
-        console.log(`📈 Match rate: ${((matchCount / results.length) * 100).toFixed(1)}%`);
+        console.log(
+          `📈 Match rate: ${((matchCount / results.length) * 100).toFixed(1)}%`
+        );
         console.log("========================================\n");
 
         return {
@@ -341,7 +366,9 @@ export const appRouter = t.router({
         }
 
         console.log(`✅ Found rule: "${rule.name}"`);
-        console.log(`🎯 Action: ${rule.actionType}${rule.actionValue ? ` (${rule.actionValue})` : ""}`);
+        console.log(
+          `🎯 Action: ${rule.actionType}${rule.actionValue ? ` (${rule.actionValue})` : ""}`
+        );
 
         // Fetch email account for Gmail service
         const emailAccounts = await ctx.db
@@ -374,7 +401,9 @@ export const appRouter = t.router({
         // Process each email
         for (let i = 0; i < input.emailIds.length; i++) {
           const emailId = input.emailIds[i];
-          console.log(`[${i + 1}/${input.emailIds.length}] Processing email ID: ${emailId}`);
+          console.log(
+            `[${i + 1}/${input.emailIds.length}] Processing email ID: ${emailId}`
+          );
 
           try {
             const [email] = await ctx.db
@@ -405,7 +434,9 @@ export const appRouter = t.router({
                     email.gmailMessageId,
                     rule.actionValue
                   );
-                  console.log(`    ✅ Added label "${rule.actionValue}" (${Date.now() - startTime}ms)`);
+                  console.log(
+                    `    ✅ Added label "${rule.actionValue}" (${Date.now() - startTime}ms)`
+                  );
                 }
                 break;
               case "ARCHIVE_AND_LABEL":
@@ -416,7 +447,9 @@ export const appRouter = t.router({
                   );
                 }
                 await gmailService.archiveEmail(email.gmailMessageId);
-                console.log(`    ✅ Archived and labeled "${rule.actionValue}" (${Date.now() - startTime}ms)`);
+                console.log(
+                  `    ✅ Archived and labeled "${rule.actionValue}" (${Date.now() - startTime}ms)`
+                );
                 break;
               case "DELETE":
                 await gmailService.deleteEmail(email.gmailMessageId);
@@ -424,14 +457,29 @@ export const appRouter = t.router({
                 break;
             }
 
+            // Log to processed_email table for audit trail
+            await ctx.db.insert(schema.processedEmail).values({
+              emailId: email.id,
+              ruleId: input.ruleId,
+              matched: true, // User manually selected this email
+              confidence: null, // Not re-running AI classification
+              actionTaken: rule.actionType,
+              llmResponse: null, // Not available in apply flow
+            });
+
+            console.log(`    📝 Logged to audit trail`);
             processed++;
           } catch (error) {
-            console.error(`    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`);
+            console.error(
+              `    ❌ ERROR: ${error instanceof Error ? error.message : "Unknown error"}`
+            );
           }
         }
 
         console.log("\n📊 ========== APPLY COMPLETE ==========");
-        console.log(`✅ Successfully processed: ${processed}/${input.emailIds.length} emails`);
+        console.log(
+          `✅ Successfully processed: ${processed}/${input.emailIds.length} emails`
+        );
         if (processed < input.emailIds.length) {
           console.log(`⚠️  Failed: ${input.emailIds.length - processed}`);
         }
@@ -474,6 +522,54 @@ export const appRouter = t.router({
           )
           .orderBy(desc(schema.email.receivedAt))
           .limit(input.limit);
+      }),
+
+    // Sync emails from Gmail without processing
+    sync: t.procedure
+      .input(
+        z.object({
+          userId: z.string(),
+          maxEmails: z.number().default(50),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        console.log(`\n🔄 ========== SYNCING EMAILS ==========`);
+        console.log(`👤 User ID: ${input.userId}`);
+        console.log(`📊 Max emails: ${input.maxEmails}`);
+
+        const processor = new EmailProcessor();
+
+        // Get user's email accounts
+        const emailAccounts = await ctx.db
+          .select()
+          .from(schema.emailAccount)
+          .where(eq(schema.emailAccount.userId, input.userId))
+          .limit(1);
+
+        if (emailAccounts.length === 0) {
+          console.error("❌ No email account found for user");
+          throw new Error("No email account found. Please connect your Gmail account.");
+        }
+
+        const emailAccount = emailAccounts[0];
+        console.log(`📧 Email account: ${emailAccount.email}`);
+
+        try {
+          const newEmailCount = await processor.syncEmails(emailAccount, input.maxEmails);
+
+          console.log(`\n✅ ========== SYNC COMPLETE ==========`);
+          console.log(`📥 Synced ${newEmailCount} new emails`);
+          console.log(`=====================================\n`);
+
+          return {
+            success: true,
+            newEmailCount,
+            message: `Synced ${newEmailCount} new emails from Gmail`
+          };
+        } catch (error) {
+          console.error("❌ Sync failed:", error);
+          throw error;
+        }
       }),
 
     processNow: t.procedure

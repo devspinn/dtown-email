@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "../lib/trpc";
+import { decodeHtml } from "@/lib/utils";
 
 interface RuleTestModalProps {
   ruleId: string;
@@ -7,17 +8,23 @@ interface RuleTestModalProps {
   onClose: () => void;
 }
 
-export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps) {
+export function RuleTestModal({
+  ruleId,
+  ruleName,
+  onClose,
+}: RuleTestModalProps) {
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [step, setStep] = useState<"testing" | "review" | "applying">("testing");
+  const [step, setStep] = useState<"testing" | "review" | "applying">(
+    "testing"
+  );
 
   // Test the rule
   const testMutation = trpc.rules.test.useMutation({
     onSuccess: (data) => {
       // Auto-select all matched emails
       const matchedIds = data.results
-        .filter((r) => r.matched)
-        .map((r) => r.email.id);
+        .filter((result) => result.matched)
+        .map((result) => result.email.id);
       setSelectedEmails(new Set(matchedIds));
       setStep("review");
     },
@@ -31,9 +38,11 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
   });
 
   // Start testing when modal opens
-  useState(() => {
+  useEffect(() => {
+    console.log("(modal) Starting rule test for ruleId:", ruleId);
     testMutation.mutate({ ruleId, limit: 20 });
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ruleId]); // testMutation.mutate is stable but ESLint doesn't recognize it
 
   const toggleEmail = (emailId: string) => {
     const newSelected = new Set(selectedEmails);
@@ -53,7 +62,7 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
     });
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string) => {
     return new Date(date).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -61,6 +70,8 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
       minute: "2-digit",
     });
   };
+
+  console.log("(modal) Rendering with step:", step);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -134,8 +145,8 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
                     </p>
                     <p className="text-sm text-blue-700 mt-1">
                       {testMutation.data.matchCount > 0
-                        ? "Review all emails below - matches are highlighted in green"
-                        : "No matches found, showing all tested emails"}
+                        ? "Matches are highlighted in green and pre-selected. You can select or deselect any emails to apply the rule to."
+                        : "No strong matches found. You can still select emails to apply the rule manually."}
                     </p>
                   </div>
                 </div>
@@ -151,28 +162,27 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
                   return (
                     <div
                       key={result.email.id}
-                      className={`border rounded-lg p-4 transition-all ${
+                      className={`border rounded-lg p-4 transition-all cursor-pointer ${
                         hasError
                           ? "border-red-200 bg-red-50"
                           : isMatch
-                          ? isSelected
-                            ? "border-green-500 bg-green-50 cursor-pointer"
-                            : "border-green-300 bg-green-50 hover:border-green-400 cursor-pointer"
-                          : "border-gray-200 bg-gray-50"
+                            ? isSelected
+                              ? "border-green-500 bg-green-50"
+                              : "border-green-300 bg-green-50 hover:border-green-400"
+                            : isSelected
+                              ? "border-gray-400 bg-gray-100"
+                              : "border-gray-200 bg-gray-50 hover:border-gray-300"
                       }`}
-                      onClick={() => isMatch && !hasError && toggleEmail(result.email.id)}
+                      onClick={() => !hasError && toggleEmail(result.email.id)}
                     >
                       <div className="flex items-start gap-3">
-                        {isMatch && !hasError && (
+                        {!hasError && (
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleEmail(result.email.id)}
                             className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                           />
-                        )}
-                        {!isMatch && !hasError && (
-                          <div className="w-4 h-4 mt-1 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
@@ -184,18 +194,18 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
                                 {result.email.subject}
                               </p>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center gap-2 shrink-0">
                               {hasError ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                   Error
                                 </span>
                               ) : isMatch ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-600 text-white">
-                                  {result.confidence}% match
+                                  {result.confidence}% confidence
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-300 text-gray-700">
-                                  No match
+                                  {result.confidence}% confidence
                                 </span>
                               )}
                               <span className="text-xs text-gray-500">
@@ -204,7 +214,7 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
                             </div>
                           </div>
                           <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                            {result.email.snippet}
+                            {decodeHtml(result.email.snippet)}
                           </p>
                           {result.reasoning && (
                             <p className="text-xs text-gray-600 mt-2 italic">
@@ -257,12 +267,12 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
         </div>
 
         {/* Footer */}
-        {step === "review" && testMutation.data && testMutation.data.matchCount > 0 && (
+        {step === "review" && testMutation.data && (
           <div className="p-6 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                {selectedEmails.size} of {testMutation.data.matchCount}{" "}
-                matching email{selectedEmails.size !== 1 ? "s" : ""} selected
+                {selectedEmails.size} of {testMutation.data.total} email
+                {selectedEmails.size !== 1 ? "s" : ""} selected
               </div>
               <div className="flex gap-3">
                 <button
@@ -273,29 +283,14 @@ export function RuleTestModal({ ruleId, ruleName, onClose }: RuleTestModalProps)
                 </button>
                 <button
                   onClick={handleApply}
-                  disabled={selectedEmails.size === 0 || applyMutation.isPending}
+                  disabled={
+                    selectedEmails.size === 0 || applyMutation.isPending
+                  }
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                   Apply to Selected
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Footer for no matches case */}
-        {step === "review" && testMutation.data && testMutation.data.matchCount === 0 && (
-          <div className="p-6 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                No matching emails to process
-              </div>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-              >
-                Close
-              </button>
             </div>
           </div>
         )}

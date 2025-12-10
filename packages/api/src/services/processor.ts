@@ -223,4 +223,69 @@ export class EmailProcessor {
       }
     }
   }
+
+  /**
+   * Sync emails from Gmail to database WITHOUT processing them against rules
+   * This is useful for the test rule feature
+   */
+  async syncEmails(emailAccount: EmailAccount, maxEmails = 50): Promise<number> {
+    if (!emailAccount.accessToken || !emailAccount.refreshToken) {
+      throw new Error("Email account missing OAuth tokens");
+    }
+
+    const gmailService = new GmailService({
+      accessToken: emailAccount.accessToken,
+      refreshToken: emailAccount.refreshToken,
+      expiryDate: emailAccount.tokenExpiresAt?.getTime(),
+    });
+
+    console.log(`\n📥 Syncing ${maxEmails} emails from Gmail for ${emailAccount.email}...`);
+    const emails = await gmailService.fetchRecentEmails(maxEmails);
+    console.log(`📧 Fetched ${emails.length} emails from Gmail`);
+
+    let newEmailCount = 0;
+    let skippedCount = 0;
+
+    // Save each email to database (skip if already exists)
+    for (const email of emails) {
+      try {
+        // Check if email already exists
+        const [existingEmail] = await db
+          .select()
+          .from(schema.email)
+          .where(eq(schema.email.gmailMessageId, email.id))
+          .limit(1);
+
+        if (existingEmail) {
+          skippedCount++;
+          continue;
+        }
+
+        // Save new email to database
+        await db.insert(schema.email).values({
+          gmailMessageId: email.id,
+          emailAccountId: emailAccount.id,
+          threadId: email.threadId,
+          from: email.from,
+          to: email.to,
+          subject: email.subject,
+          snippet: email.snippet,
+          bodyText: email.bodyText,
+          bodyHtml: email.bodyHtml,
+          labelIds: JSON.stringify(email.labelIds),
+          receivedAt: email.receivedAt,
+          isRead: email.isRead,
+          isStarred: email.isStarred,
+        });
+
+        newEmailCount++;
+      } catch (error) {
+        console.error(`Failed to sync email ${email.id}:`, error);
+        // Continue with other emails
+      }
+    }
+
+    console.log(`✅ Sync complete: ${newEmailCount} new emails, ${skippedCount} already in DB`);
+    return newEmailCount;
+  }
 }
