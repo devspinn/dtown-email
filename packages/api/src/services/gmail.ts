@@ -45,11 +45,12 @@ export class GmailService {
   async fetchRecentEmails(maxResults = 10): Promise<EmailMessage[]> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
-    // List messages
+    // List messages (no query filter to get all recent emails, including archived)
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults,
-      q: "in:inbox category:primary", // Only inbox for now
+      q: "category:primary",
+      // No query filter - fetch all recent emails including archived ones
     });
 
     const messages = listResponse.data.messages || [];
@@ -181,6 +182,40 @@ export class GmailService {
     await gmail.users.messages.trash({
       userId: "me",
       id: messageId,
+    });
+  }
+
+  /**
+   * Mute a thread by applying custom user-muted label and archiving
+   * We use a custom label instead of Gmail's MUTED system label
+   * The email processor will automatically archive future messages in this thread
+   */
+  async muteThread(messageId: string): Promise<void> {
+    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+
+    // First, get the thread ID from the message
+    const message = await gmail.users.messages.get({
+      userId: "me",
+      id: messageId,
+      format: "minimal",
+    });
+
+    const threadId = message.data.threadId;
+    if (!threadId) {
+      throw new Error("Thread ID not found for message");
+    }
+
+    // Get or create the user-muted label
+    const userMutedLabelId = await this.getOrCreateLabel("user-muted");
+
+    // Apply the user-muted label and remove INBOX at thread level
+    await gmail.users.threads.modify({
+      userId: "me",
+      id: threadId,
+      requestBody: {
+        addLabelIds: [userMutedLabelId],
+        removeLabelIds: ["INBOX"],
+      },
     });
   }
 

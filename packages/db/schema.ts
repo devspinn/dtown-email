@@ -123,6 +123,7 @@ export const email = pgTable("email", {
   receivedAt: timestamp("receivedAt").notNull(),
   isRead: boolean("isRead").notNull().default(false),
   isStarred: boolean("isStarred").notNull().default(false),
+  lastProcessedAt: timestamp("lastProcessedAt"), // Last time this email was processed against rules
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { trpc } from "../lib/trpc";
 import { decodeHtml } from "@/lib/utils";
 
@@ -17,10 +17,12 @@ export function RuleTestModal({
   const [step, setStep] = useState<"testing" | "review" | "applying">(
     "testing"
   );
+  const hasStartedTest = useRef(false);
 
   // Test the rule
   const testMutation = trpc.rules.test.useMutation({
     onSuccess: (data) => {
+      console.log("(modal) Rule test completed:", data);
       // Auto-select all matched emails
       const matchedIds = data.results
         .filter((result) => result.matched)
@@ -37,10 +39,15 @@ export function RuleTestModal({
     },
   });
 
-  // Start testing when modal opens
+  // Start testing when modal opens (only once, even in StrictMode)
   useEffect(() => {
-    console.log("(modal) Starting rule test for ruleId:", ruleId);
-    testMutation.mutate({ ruleId, limit: 20 });
+    if (!hasStartedTest.current) {
+      console.log("(modal) Starting rule test for ruleId:", ruleId);
+      testMutation.mutate({ ruleId, limit: 10 });
+      hasStartedTest.current = true;
+    } else {
+      console.log("(modal) Rule test already started, skipping");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ruleId]); // testMutation.mutate is stable but ESLint doesn't recognize it
 

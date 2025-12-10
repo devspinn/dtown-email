@@ -1,4 +1,4 @@
-import { db, schema, eq, and, type Rule, type EmailAccount } from "@dtown-email/db";
+import { db, schema, eq, and, type EmailAccount } from "@dtown-email/db";
 import { GmailService, type EmailMessage } from "./gmail";
 import { AIService, type RuleDefinition } from "./ai";
 
@@ -10,7 +10,84 @@ export class EmailProcessor {
   }
 
   /**
-   * Process a single email against all active rules for a user
+   * Core logic: Process email content against rules and execute actions
+   * This is the shared processing logic used by both bulk and single email processing
+   */
+  private async processEmailAgainstRules(
+    emailId: string,
+    emailBody: string,
+    gmailMessageId: string,
+    userId: string,
+    gmailService: GmailService
+  ): Promise<void> {
+    // Fetch active rules for this user, ordered by priority
+    const rules = await db
+      .select()
+      .from(schema.rule)
+      .where(
+        and(eq(schema.rule.userId, userId), eq(schema.rule.isActive, true))
+      )
+      .orderBy(schema.rule.priority);
+
+    if (rules.length === 0) {
+      console.log(`No active rules for user ${userId}`);
+      return;
+    }
+
+    // Convert to RuleDefinition format for AI service
+    const ruleDefinitions: RuleDefinition[] = rules.map((r) => ({
+      id: r.id,
+      name: r.name,
+      systemPrompt: r.systemPrompt,
+      actionType: r.actionType,
+      actionValue: r.actionValue,
+    }));
+
+    // Classify email against all rules
+    console.log(
+      `Classifying email ${gmailMessageId} against ${rules.length} rules...`
+    );
+
+    const matches = await this.aiService.classifyAgainstRules(
+      emailBody,
+      ruleDefinitions
+    );
+
+    // Execute action for the highest-confidence match (if any)
+    if (matches.length === 0) {
+      console.log(`No rules matched for email ${gmailMessageId}`);
+      return;
+    }
+    for (const match of matches) {
+      console.log(
+        `Email matched rule "${match.rule.name}" with ${match.result.confidence}% confidence`
+      );
+
+      // Log the match to processed_emails table
+      await db.insert(schema.processedEmail).values({
+        emailId,
+        ruleId: match.rule.id,
+        matched: true,
+        confidence: match.result.confidence,
+        actionTaken: match.rule.actionType,
+        llmResponse: JSON.stringify(match.result),
+      });
+
+      // Execute the action
+      await this.executeAction(
+        gmailMessageId,
+        match.rule.actionType,
+        match.rule.actionValue,
+        gmailService
+      );
+      console.log(
+        `Executed action "${match.rule.actionType}" for email ${gmailMessageId}`
+      );
+    }
+  }
+
+  /**
+   * Process a single email from Gmail (used for bulk processing)
    */
   async processEmail(
     emailMessage: EmailMessage,
@@ -54,67 +131,69 @@ export class EmailProcessor {
       emailId = newEmail.id;
     }
 
-    // 3. Fetch active rules for this user, ordered by priority
-    const rules = await db
-      .select()
-      .from(schema.rule)
-      .where(
-        and(
-          eq(schema.rule.userId, emailAccount.userId),
-          eq(schema.rule.isActive, true)
+    // 2.5. Check if this thread has been user-muted
+    // If the first email in the thread has the user-muted label, automatically archive subsequent emails
+    if (emailMessage.threadId) {
+      const firstEmailInThread = await db
+        .select()
+        .from(schema.email)
+        .where(
+          and(
+            eq(schema.email.threadId, emailMessage.threadId),
+            eq(schema.email.emailAccountId, emailAccount.id)
+          )
         )
-      )
-      .orderBy(schema.rule.priority);
+        .orderBy(schema.email.receivedAt)
+        .limit(1);
 
-    if (rules.length === 0) {
-      console.log(`No active rules for user ${emailAccount.userId}`);
-      return;
+      if (
+        firstEmailInThread.length > 0 &&
+        firstEmailInThread[0].id !== emailId
+      ) {
+        // This is not the first email in the thread
+        const firstEmailLabels = JSON.parse(
+          firstEmailInThread[0].labelIds || "[]"
+        );
+        console.log(`DELETE_THIS firstEmailLabels:`, firstEmailLabels);
+
+        // Check if user-muted label exists on first email
+        // We need to check by label name since label IDs can vary
+        if (firstEmailLabels.includes("user-muted")) {
+          console.log(
+            `Thread ${emailMessage.threadId} is user-muted, auto-archiving and applying label...`
+          );
+
+          // Archive and apply user-muted label to this follow-up email
+          await gmailService.archiveEmail(emailMessage.id);
+          await gmailService.addLabel(emailMessage.id, "user-muted");
+
+          console.log(
+            `Auto-archived follow-up email ${emailMessage.id} in muted thread`
+          );
+          return; // Skip rule processing for muted threads
+        }
+      }
+    } else {
+      console.log(
+        "DELETE_THIS No threadId for this email, skipping thread mute check ",
+        emailMessage.from
+      );
     }
 
-    // 4. Convert to RuleDefinition format for AI service
-    const ruleDefinitions: RuleDefinition[] = rules.map((r) => ({
-      id: r.id,
-      name: r.name,
-      systemPrompt: r.systemPrompt,
-      actionType: r.actionType,
-      actionValue: r.actionValue,
-    }));
-
-    // 5. Classify email against all rules
-    console.log(`Classifying email ${emailMessage.id} against ${rules.length} rules...`);
-
-    const matches = await this.aiService.classifyAgainstRules(
+    // 3. Process email against all active rules
+    await this.processEmailAgainstRules(
+      emailId,
       emailMessage.bodyText,
-      ruleDefinitions
+      emailMessage.id,
+      emailAccount.userId,
+      gmailService
     );
 
-    // 6. Execute action for the highest-confidence match (if any)
-    if (matches.length > 0) {
-      const bestMatch = matches[0];
-      console.log(
-        `Email matched rule "${bestMatch.rule.name}" with ${bestMatch.result.confidence}% confidence`
-      );
-
-      // Log the match to processed_emails table
-      await db.insert(schema.processedEmail).values({
-        emailId,
-        ruleId: bestMatch.rule.id,
-        matched: true,
-        confidence: bestMatch.result.confidence,
-        actionTaken: bestMatch.rule.actionType,
-        llmResponse: JSON.stringify(bestMatch.result),
-      });
-
-      // Execute the action
-      await this.executeAction(
-        emailMessage.id,
-        bestMatch.rule.actionType,
-        bestMatch.rule.actionValue,
-        gmailService
-      );
-    } else {
-      console.log(`No rules matched for email ${emailMessage.id}`);
-    }
+    // 4. Update lastProcessedAt timestamp
+    await db
+      .update(schema.email)
+      .set({ lastProcessedAt: new Date() })
+      .where(eq(schema.email.id, emailId));
   }
 
   /**
@@ -138,7 +217,9 @@ export class EmailProcessor {
             throw new Error("Label action requires actionValue");
           }
           await gmailService.addLabel(gmailMessageId, actionValue);
-          console.log(`Added label "${actionValue}" to email ${gmailMessageId}`);
+          console.log(
+            `Added label "${actionValue}" to email ${gmailMessageId}`
+          );
           break;
 
         case "DELETE":
@@ -157,6 +238,22 @@ export class EmailProcessor {
           );
           break;
 
+        case "MUTE":
+          await gmailService.muteThread(gmailMessageId);
+          console.log(`Muted thread for email ${gmailMessageId}`);
+          break;
+
+        case "ARCHIVE_LABEL_AND_MUTE":
+          if (!actionValue) {
+            throw new Error("Archive+Label+Mute action requires actionValue");
+          }
+          await gmailService.addLabel(gmailMessageId, actionValue);
+          await gmailService.muteThread(gmailMessageId);
+          console.log(
+            `Labeled "${actionValue}", archived, and muted thread for email ${gmailMessageId}`
+          );
+          break;
+
         default:
           console.warn(`Unknown action type: ${actionType}`);
       }
@@ -167,12 +264,78 @@ export class EmailProcessor {
   }
 
   /**
-   * Process all recent emails for a given email account
+   * Process a single email by its database ID against all active rules
    */
-  async processRecentEmails(
-    emailAccount: EmailAccount,
-    maxEmails = 10
-  ): Promise<void> {
+  async processEmailById(emailId: string, userId: string): Promise<void> {
+    // Fetch email from database
+    const [email] = await db
+      .select()
+      .from(schema.email)
+      .where(eq(schema.email.id, emailId))
+      .limit(1);
+
+    if (!email) {
+      throw new Error(`Email with ID ${emailId} not found`);
+    }
+
+    console.log(`📧 Processing email: ${email.subject}`);
+    console.log(`   From: ${email.from}`);
+
+    // Get the user's email account
+    const [emailAccount] = await db
+      .select()
+      .from(schema.emailAccount)
+      .where(eq(schema.emailAccount.userId, userId))
+      .limit(1);
+
+    if (!emailAccount) {
+      throw new Error(`No email account found for user ${userId}`);
+    }
+
+    if (!emailAccount.accessToken || !emailAccount.refreshToken) {
+      throw new Error("Email account missing OAuth tokens");
+    }
+
+    // Create Gmail service
+    const gmailService = new GmailService({
+      accessToken: emailAccount.accessToken,
+      refreshToken: emailAccount.refreshToken,
+      expiryDate: emailAccount.tokenExpiresAt?.getTime(),
+    });
+
+    // Process email against all active rules (shared logic)
+    await this.processEmailAgainstRules(
+      emailId,
+      email.bodyText,
+      email.gmailMessageId,
+      userId,
+      gmailService
+    );
+
+    // Update lastProcessedAt timestamp
+    await db
+      .update(schema.email)
+      .set({ lastProcessedAt: new Date() })
+      .where(eq(schema.email.id, emailId));
+
+    console.log(`✅ Email processed and lastProcessedAt updated`);
+  }
+
+  /**
+   * Process recent emails for a user (assumes one email account per user)
+   */
+  async processUserEmails(userId: string, maxEmails = 10): Promise<void> {
+    // Get the user's email account (assumes one per user)
+    const [emailAccount] = await db
+      .select()
+      .from(schema.emailAccount)
+      .where(eq(schema.emailAccount.userId, userId))
+      .limit(1);
+
+    if (!emailAccount) {
+      throw new Error(`No email account found for user ${userId}`);
+    }
+
     if (!emailAccount.accessToken || !emailAccount.refreshToken) {
       throw new Error("Email account missing OAuth tokens");
     }
@@ -183,7 +346,9 @@ export class EmailProcessor {
       expiryDate: emailAccount.tokenExpiresAt?.getTime(),
     });
 
-    console.log(`Fetching ${maxEmails} recent emails for ${emailAccount.email}...`);
+    console.log(
+      `Fetching ${maxEmails} recent emails for ${emailAccount.email}...`
+    );
     const emails = await gmailService.fetchRecentEmails(maxEmails);
     console.log(`Found ${emails.length} emails to process`);
 
@@ -199,36 +364,13 @@ export class EmailProcessor {
   }
 
   /**
-   * Process all email accounts for a specific user
-   */
-  async processUserEmails(userId: string, maxEmailsPerAccount = 10): Promise<void> {
-    const emailAccounts = await db
-      .select()
-      .from(schema.emailAccount)
-      .where(
-        and(
-          eq(schema.emailAccount.userId, userId),
-          eq(schema.emailAccount.isActive, true)
-        )
-      );
-
-    console.log(`Processing ${emailAccounts.length} email accounts for user ${userId}`);
-
-    for (const account of emailAccounts) {
-      try {
-        await this.processRecentEmails(account, maxEmailsPerAccount);
-      } catch (error) {
-        console.error(`Failed to process account ${account.email}:`, error);
-        // Continue with other accounts
-      }
-    }
-  }
-
-  /**
    * Sync emails from Gmail to database WITHOUT processing them against rules
    * This is useful for the test rule feature
    */
-  async syncEmails(emailAccount: EmailAccount, maxEmails = 50): Promise<number> {
+  async syncEmails(
+    emailAccount: EmailAccount,
+    maxEmails = 50
+  ): Promise<number> {
     if (!emailAccount.accessToken || !emailAccount.refreshToken) {
       throw new Error("Email account missing OAuth tokens");
     }
@@ -239,15 +381,19 @@ export class EmailProcessor {
       expiryDate: emailAccount.tokenExpiresAt?.getTime(),
     });
 
-    console.log(`\n📥 Syncing ${maxEmails} emails from Gmail for ${emailAccount.email}...`);
+    console.log(
+      `\n📥 Syncing ${maxEmails} emails from Gmail for ${emailAccount.email}...`
+    );
     const emails = await gmailService.fetchRecentEmails(maxEmails);
     console.log(`📧 Fetched ${emails.length} emails from Gmail`);
 
     let newEmailCount = 0;
-    let skippedCount = 0;
+    let updatedCount = 0;
 
-    // Save each email to database (skip if already exists)
+    // Save or update each email in database
     for (const email of emails) {
+      console.log(`Syncing email ${email.id} - ${email.subject}`);
+      console.log(email.labelIds);
       try {
         // Check if email already exists
         const [existingEmail] = await db
@@ -257,35 +403,51 @@ export class EmailProcessor {
           .limit(1);
 
         if (existingEmail) {
-          skippedCount++;
-          continue;
+          console.log(`Email ${email.id} exists, updating...`);
+          // Update existing email with latest attributes from Gmail
+          await db
+            .update(schema.email)
+            .set({
+              labelIds: JSON.stringify(email.labelIds),
+              isRead: email.isRead,
+              isStarred: email.isStarred,
+              snippet: email.snippet,
+              bodyText: email.bodyText,
+              bodyHtml: email.bodyHtml,
+            })
+            .where(eq(schema.email.id, existingEmail.id));
+
+          updatedCount++;
+        } else {
+          console.log(`Email ${email.id} is new, inserting...`);
+          // Save new email to database
+          await db.insert(schema.email).values({
+            gmailMessageId: email.id,
+            emailAccountId: emailAccount.id,
+            threadId: email.threadId,
+            from: email.from,
+            to: email.to,
+            subject: email.subject,
+            snippet: email.snippet,
+            bodyText: email.bodyText,
+            bodyHtml: email.bodyHtml,
+            labelIds: JSON.stringify(email.labelIds),
+            receivedAt: email.receivedAt,
+            isRead: email.isRead,
+            isStarred: email.isStarred,
+          });
+
+          newEmailCount++;
         }
-
-        // Save new email to database
-        await db.insert(schema.email).values({
-          gmailMessageId: email.id,
-          emailAccountId: emailAccount.id,
-          threadId: email.threadId,
-          from: email.from,
-          to: email.to,
-          subject: email.subject,
-          snippet: email.snippet,
-          bodyText: email.bodyText,
-          bodyHtml: email.bodyHtml,
-          labelIds: JSON.stringify(email.labelIds),
-          receivedAt: email.receivedAt,
-          isRead: email.isRead,
-          isStarred: email.isStarred,
-        });
-
-        newEmailCount++;
       } catch (error) {
         console.error(`Failed to sync email ${email.id}:`, error);
         // Continue with other emails
       }
     }
 
-    console.log(`✅ Sync complete: ${newEmailCount} new emails, ${skippedCount} already in DB`);
+    console.log(
+      `✅ Sync complete: ${newEmailCount} new emails, ${updatedCount} updated`
+    );
     return newEmailCount;
   }
 }

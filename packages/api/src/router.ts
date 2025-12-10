@@ -106,6 +106,8 @@ export const appRouter = t.router({
             "LABEL",
             "DELETE",
             "ARCHIVE_AND_LABEL",
+            "MUTE",
+            "ARCHIVE_LABEL_AND_MUTE",
           ]),
           actionValue: z.string().optional(),
           priority: z.number().default(0),
@@ -127,7 +129,14 @@ export const appRouter = t.router({
           description: z.string().optional(),
           systemPrompt: z.string().optional(),
           actionType: z
-            .enum(["ARCHIVE", "LABEL", "DELETE", "ARCHIVE_AND_LABEL"])
+            .enum([
+              "ARCHIVE",
+              "LABEL",
+              "DELETE",
+              "ARCHIVE_AND_LABEL",
+              "MUTE",
+              "ARCHIVE_LABEL_AND_MUTE",
+            ])
             .optional(),
           actionValue: z.string().optional(),
           isActive: z.boolean().optional(),
@@ -194,26 +203,26 @@ export const appRouter = t.router({
           `📝 System prompt: ${rule.systemPrompt.substring(0, 100)}...`
         );
 
-        // Fetch recent emails for this user's email accounts
-        const emailAccounts = await ctx.db
+        // Get the user's email account (one per user)
+        const [emailAccount] = await ctx.db
           .select()
           .from(schema.emailAccount)
           .where(eq(schema.emailAccount.userId, rule.userId))
           .limit(1);
 
-        if (emailAccounts.length === 0) {
-          console.warn("⚠️  No email accounts found for user");
+        if (!emailAccount) {
+          console.warn("⚠️  No email account found for user");
           return { results: [], matchCount: 0, total: 0 };
         }
 
-        console.log(`📧 Email account: ${emailAccounts[0].email}`);
+        console.log(`📧 Email account: ${emailAccount.email}`);
 
         // Always sync latest emails from Gmail before testing
         console.log(`📥 Syncing latest ${input.limit} emails from Gmail...`);
         const processor = new EmailProcessor();
 
         try {
-          const syncCount = await processor.syncEmails(emailAccounts[0], input.limit);
+          const syncCount = await processor.syncEmails(emailAccount, input.limit);
           console.log(`✅ Synced ${syncCount} new emails from Gmail`);
         } catch (error) {
           console.error("❌ Failed to sync emails:", error);
@@ -224,7 +233,7 @@ export const appRouter = t.router({
         const recentEmails = await ctx.db
           .select()
           .from(schema.email)
-          .where(eq(schema.email.emailAccountId, emailAccounts[0].id))
+          .where(eq(schema.email.emailAccountId, emailAccount.id))
           .orderBy(desc(schema.email.receivedAt))
           .limit(input.limit);
 
@@ -233,7 +242,9 @@ export const appRouter = t.router({
           return { results: [], matchCount: 0, total: 0 };
         }
 
-        console.log(`\n📬 Testing against ${recentEmails.length} emails from database`);
+        console.log(
+          `\n📬 Testing against ${recentEmails.length} emails from database`
+        );
         console.log("🤖 Starting AI classification...\n");
 
         // Test each email against the rule
@@ -261,14 +272,13 @@ export const appRouter = t.router({
 
               if (classification.matched) {
                 console.log(
-                  `    ✅ MATCH (${classification.confidence}% confidence, ${duration}ms)`
+                  `    ✅ MATCH (${classification.confidence}% confidence, ${duration}ms) (${email.from})`
                 );
-                console.log(`    💡 Reasoning: ${classification.reasoning}`);
               } else {
-                console.log(`    ⚪ No match (${duration}ms)`);
-                if (classification.reasoning) {
-                  console.log(`    💭 Reasoning: ${classification.reasoning}`);
-                }
+                console.log(`    ⚪ No match (${duration}ms) (${email.from})`);
+              }
+              if (classification.reasoning) {
+                console.log(`    💭 Reasoning: ${classification.reasoning}`);
               }
 
               processedCount++;
@@ -314,7 +324,7 @@ export const appRouter = t.router({
 
         const matchCount = results.filter((r) => r.matched).length;
 
-        console.log("\n📊 ========== TEST COMPLETE ==========");
+        console.log(`\n📊 ========== TEST COMPLETE ========== ${rule.name}`);
         console.log(
           `✅ Processed: ${processedCount}/${recentEmails.length} emails`
         );
@@ -370,19 +380,18 @@ export const appRouter = t.router({
           `🎯 Action: ${rule.actionType}${rule.actionValue ? ` (${rule.actionValue})` : ""}`
         );
 
-        // Fetch email account for Gmail service
-        const emailAccounts = await ctx.db
+        // Get the user's email account (one per user)
+        const [emailAccount] = await ctx.db
           .select()
           .from(schema.emailAccount)
           .where(eq(schema.emailAccount.userId, rule.userId))
           .limit(1);
 
-        if (emailAccounts.length === 0) {
+        if (!emailAccount) {
           console.error("❌ No email account found");
           throw new Error("No email account found");
         }
 
-        const emailAccount = emailAccounts[0];
         console.log(`📬 Email account: ${emailAccount.email}`);
 
         let processed = 0;
@@ -451,6 +460,24 @@ export const appRouter = t.router({
                   `    ✅ Archived and labeled "${rule.actionValue}" (${Date.now() - startTime}ms)`
                 );
                 break;
+              case "MUTE":
+                await gmailService.muteThread(email.gmailMessageId);
+                console.log(
+                  `    ✅ Muted thread (${Date.now() - startTime}ms)`
+                );
+                break;
+              case "ARCHIVE_LABEL_AND_MUTE":
+                if (rule.actionValue) {
+                  await gmailService.addLabel(
+                    email.gmailMessageId,
+                    rule.actionValue
+                  );
+                }
+                await gmailService.muteThread(email.gmailMessageId);
+                console.log(
+                  `    ✅ Labeled "${rule.actionValue}", archived, and muted thread (${Date.now() - startTime}ms)`
+                );
+                break;
               case "DELETE":
                 await gmailService.deleteEmail(email.gmailMessageId);
                 console.log(`    ✅ Deleted (${Date.now() - startTime}ms)`);
@@ -499,27 +526,22 @@ export const appRouter = t.router({
         })
       )
       .query(async ({ ctx, input }) => {
-        // Get user's email accounts
-        const accounts = await ctx.db
+        // Get the user's email account (one per user)
+        const [account] = await ctx.db
           .select()
           .from(schema.emailAccount)
-          .where(eq(schema.emailAccount.userId, input.userId));
+          .where(eq(schema.emailAccount.userId, input.userId))
+          .limit(1);
 
-        if (accounts.length === 0) {
+        if (!account) {
           return [];
         }
 
-        // Get emails for these accounts
-        const accountIds = accounts.map((a) => a.id);
+        // Get emails for this account
         return ctx.db
           .select()
           .from(schema.email)
-          .where(
-            eq(
-              schema.email.emailAccountId,
-              accountIds[0] // TODO: Handle multiple accounts properly
-            )
-          )
+          .where(eq(schema.email.emailAccountId, account.id))
           .orderBy(desc(schema.email.receivedAt))
           .limit(input.limit);
       }),
@@ -539,23 +561,27 @@ export const appRouter = t.router({
 
         const processor = new EmailProcessor();
 
-        // Get user's email accounts
-        const emailAccounts = await ctx.db
+        // Get the user's email account (one per user)
+        const [emailAccount] = await ctx.db
           .select()
           .from(schema.emailAccount)
           .where(eq(schema.emailAccount.userId, input.userId))
           .limit(1);
 
-        if (emailAccounts.length === 0) {
+        if (!emailAccount) {
           console.error("❌ No email account found for user");
-          throw new Error("No email account found. Please connect your Gmail account.");
+          throw new Error(
+            "No email account found. Please connect your Gmail account."
+          );
         }
 
-        const emailAccount = emailAccounts[0];
         console.log(`📧 Email account: ${emailAccount.email}`);
 
         try {
-          const newEmailCount = await processor.syncEmails(emailAccount, input.maxEmails);
+          const newEmailCount = await processor.syncEmails(
+            emailAccount,
+            input.maxEmails
+          );
 
           console.log(`\n✅ ========== SYNC COMPLETE ==========`);
           console.log(`📥 Synced ${newEmailCount} new emails`);
@@ -564,7 +590,7 @@ export const appRouter = t.router({
           return {
             success: true,
             newEmailCount,
-            message: `Synced ${newEmailCount} new emails from Gmail`
+            message: `Synced ${newEmailCount} new emails from Gmail`,
           };
         } catch (error) {
           console.error("❌ Sync failed:", error);
@@ -576,16 +602,41 @@ export const appRouter = t.router({
       .input(
         z.object({
           userId: z.string(),
-          maxEmailsPerAccount: z.number().default(10),
+          maxEmails: z.number().default(10),
         })
       )
       .mutation(async ({ input }) => {
         const processor = new EmailProcessor();
-        await processor.processUserEmails(
-          input.userId,
-          input.maxEmailsPerAccount
-        );
+        await processor.processUserEmails(input.userId, input.maxEmails);
         return { success: true, message: "Email processing started" };
+      }),
+
+    // Process a single email by ID
+    processOne: t.procedure
+      .input(
+        z.object({
+          emailId: z.string(),
+          userId: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        console.log(`\n⚡ ========== PROCESSING SINGLE EMAIL ==========`);
+        console.log(`📧 Email ID: ${input.emailId}`);
+        console.log(`👤 User ID: ${input.userId}`);
+
+        const processor = new EmailProcessor();
+
+        try {
+          await processor.processEmailById(input.emailId, input.userId);
+
+          console.log(`\n✅ ========== PROCESSING COMPLETE ==========`);
+          console.log(`==========================================\n`);
+
+          return { success: true, message: "Email processed successfully" };
+        } catch (error) {
+          console.error("❌ Processing failed:", error);
+          throw error;
+        }
       }),
   }),
 
@@ -599,17 +650,7 @@ export const appRouter = t.router({
         })
       )
       .query(async ({ ctx, input }) => {
-        // Get user's email accounts
-        const accounts = await ctx.db
-          .select()
-          .from(schema.emailAccount)
-          .where(eq(schema.emailAccount.userId, input.userId));
-
-        if (accounts.length === 0) {
-          return [];
-        }
-
-        // Get processed emails
+        // Get processed emails with email and rule details
         return ctx.db
           .select({
             id: schema.processedEmail.id,

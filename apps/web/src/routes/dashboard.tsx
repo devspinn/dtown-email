@@ -16,8 +16,8 @@ function DashboardPage() {
   const [newRuleName, setNewRuleName] = useState("");
   const [newRuleDescription, setNewRuleDescription] = useState("");
   const [newRuleAction, setNewRuleAction] = useState<
-    "ARCHIVE" | "LABEL" | "DELETE" | "ARCHIVE_AND_LABEL"
-  >("ARCHIVE_AND_LABEL");
+    "ARCHIVE" | "LABEL" | "DELETE" | "ARCHIVE_AND_LABEL" | "MUTE" | "ARCHIVE_LABEL_AND_MUTE"
+  >("ARCHIVE_LABEL_AND_MUTE");
   const [newRuleLabel, setNewRuleLabel] = useState("");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
@@ -34,6 +34,31 @@ function DashboardPage() {
       enabled: !!session?.user.id, // Only fetch when we have a user ID
     }
   );
+
+  // Fetch all emails from database
+  const { data: emails, isLoading: emailsLoading } = trpc.emails.list.useQuery(
+    {
+      userId: session?.user.id || "",
+      limit: 100,
+    },
+    {
+      enabled: !!session?.user.id,
+    }
+  );
+
+  // Sync emails mutation
+  const syncEmailsMutation = trpc.emails.sync.useMutation({
+    onSuccess: () => {
+      utils.emails.list.invalidate();
+    },
+  });
+
+  // Process single email mutation
+  const processEmailMutation = trpc.emails.processOne.useMutation({
+    onSuccess: () => {
+      utils.emails.list.invalidate();
+    },
+  });
 
   // Create rule mutation
   const createRuleMutation = trpc.rules.create.useMutation({
@@ -95,7 +120,9 @@ function DashboardPage() {
         systemPrompt: result.systemPrompt,
         actionType: newRuleAction,
         actionValue:
-          newRuleAction === "LABEL" || newRuleAction === "ARCHIVE_AND_LABEL"
+          newRuleAction === "LABEL" ||
+          newRuleAction === "ARCHIVE_AND_LABEL" ||
+          newRuleAction === "ARCHIVE_LABEL_AND_MUTE"
             ? newRuleLabel
             : undefined,
         priority: 0,
@@ -133,6 +160,26 @@ function DashboardPage() {
             </span>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
               Label: {actionValue}
+            </span>
+          </>
+        );
+      case "MUTE":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            Mute Thread
+          </span>
+        );
+      case "ARCHIVE_LABEL_AND_MUTE":
+        return (
+          <>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              Archive
+            </span>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Label: {actionValue}
+            </span>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+              Mute
             </span>
           </>
         );
@@ -227,6 +274,8 @@ function DashboardPage() {
                         | "LABEL"
                         | "DELETE"
                         | "ARCHIVE_AND_LABEL"
+                        | "MUTE"
+                        | "ARCHIVE_LABEL_AND_MUTE"
                     )
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -234,12 +283,15 @@ function DashboardPage() {
                   <option value="ARCHIVE">Archive</option>
                   <option value="LABEL">Add Label</option>
                   <option value="ARCHIVE_AND_LABEL">Archive and Label</option>
+                  <option value="MUTE">Mute Thread</option>
+                  <option value="ARCHIVE_LABEL_AND_MUTE">Archive, Label, and Mute</option>
                   <option value="DELETE">Delete</option>
                 </select>
               </div>
 
               {(newRuleAction === "LABEL" ||
-                newRuleAction === "ARCHIVE_AND_LABEL") && (
+                newRuleAction === "ARCHIVE_AND_LABEL" ||
+                newRuleAction === "ARCHIVE_LABEL_AND_MUTE") && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Label Name *
@@ -397,7 +449,193 @@ function DashboardPage() {
           )}
         </div>
 
-        {/* Test Rule Modal */}
+        {/* Emails Section */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">Emails</h2>
+            <button
+              onClick={() =>
+                syncEmailsMutation.mutate({
+                  userId: session?.user.id || "",
+                  maxEmails: 50,
+                })
+              }
+              disabled={syncEmailsMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {syncEmailsMutation.isPending ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Sync Emails
+                </>
+              )}
+            </button>
+          </div>
+
+          {emailsLoading ? (
+            <div className="bg-white rounded-lg shadow p-6 text-center">
+              <p className="text-gray-600">Loading emails...</p>
+            </div>
+          ) : !emails || emails.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-6 text-center">
+              <p className="text-gray-600 mb-4">
+                No emails in database yet. Click "Sync Emails" to fetch from
+                Gmail.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Labels
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Received
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {emails.map((email) => {
+                      const labels = JSON.parse(email.labelIds || "[]");
+                      return (
+                        <tr key={email.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900 truncate max-w-md">
+                              {email.subject}
+                            </div>
+                            <div className="text-sm text-gray-500 truncate max-w-md">
+                              {email.from}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {labels.length > 0 ? (
+                                labels.map((label: string, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                                  >
+                                    {label}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-sm text-gray-400">
+                                  No labels
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                            {new Date(email.receivedAt).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() =>
+                                processEmailMutation.mutate({
+                                  emailId: email.id,
+                                  userId: session?.user.id || "",
+                                })
+                              }
+                              disabled={processEmailMutation.isPending}
+                              className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+                            >
+                              {processEmailMutation.isPending ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-3 w-3 mr-1"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    />
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    />
+                                  </svg>
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <svg
+                                    className="h-3 w-3 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    />
+                                  </svg>
+                                  Process
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
         {testingRuleId && (
           <RuleTestModal
             ruleId={testingRuleId}
