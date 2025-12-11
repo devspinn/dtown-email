@@ -101,15 +101,8 @@ export const appRouter = t.router({
           name: z.string(),
           description: z.string().optional(),
           systemPrompt: z.string(),
-          actionType: z.enum([
-            "ARCHIVE",
-            "LABEL",
-            "DELETE",
-            "ARCHIVE_AND_LABEL",
-            "MUTE",
-            "ARCHIVE_LABEL_AND_MUTE",
-          ]),
-          actionValue: z.string().optional(),
+          actionType: z.enum(["LABEL", "LABEL_AND_ARCHIVE", "LABEL_AND_MUTE"]),
+          actionValue: z.string(), // Required - label name for all actions
           priority: z.number().default(0),
         })
       )
@@ -129,14 +122,7 @@ export const appRouter = t.router({
           description: z.string().optional(),
           systemPrompt: z.string().optional(),
           actionType: z
-            .enum([
-              "ARCHIVE",
-              "LABEL",
-              "DELETE",
-              "ARCHIVE_AND_LABEL",
-              "MUTE",
-              "ARCHIVE_LABEL_AND_MUTE",
-            ])
+            .enum(["LABEL", "LABEL_AND_ARCHIVE", "LABEL_AND_MUTE"])
             .optional(),
           actionValue: z.string().optional(),
           isActive: z.boolean().optional(),
@@ -446,12 +432,13 @@ export const appRouter = t.router({
               `    ✅ Action "${rule.actionType}" executed (${Date.now() - startTime}ms)`
             );
 
-            // Log to processed_email table for audit trail
-            await ctx.db.insert(schema.processedEmail).values({
+            // Log to rule_execution table for audit trail
+            await ctx.db.insert(schema.ruleExecution).values({
               emailId: email.id,
               ruleId: input.ruleId,
               matched: true, // User manually selected this email
               confidence: null, // Not re-running AI classification
+              reasoning: null, // Not available in manual apply flow
               actionTaken: rule.actionType,
               llmResponse: null, // Not available in apply flow
             });
@@ -602,8 +589,8 @@ export const appRouter = t.router({
       }),
   }),
 
-  // Processed emails (audit trail)
-  processed: t.router({
+  // Rule executions (audit trail)
+  executions: t.router({
     list: t.procedure
       .input(
         z.object({
@@ -612,28 +599,29 @@ export const appRouter = t.router({
         })
       )
       .query(async ({ ctx, input }) => {
-        // Get processed emails with email and rule details
+        // Get rule executions with email and rule details
         return ctx.db
           .select({
-            id: schema.processedEmail.id,
-            matched: schema.processedEmail.matched,
-            confidence: schema.processedEmail.confidence,
-            actionTaken: schema.processedEmail.actionTaken,
-            processedAt: schema.processedEmail.processedAt,
+            id: schema.ruleExecution.id,
+            matched: schema.ruleExecution.matched,
+            confidence: schema.ruleExecution.confidence,
+            reasoning: schema.ruleExecution.reasoning,
+            actionTaken: schema.ruleExecution.actionTaken,
+            executedAt: schema.ruleExecution.executedAt,
             email: schema.email,
             rule: schema.rule,
           })
-          .from(schema.processedEmail)
+          .from(schema.ruleExecution)
           .innerJoin(
             schema.email,
-            eq(schema.processedEmail.emailId, schema.email.id)
+            eq(schema.ruleExecution.emailId, schema.email.id)
           )
           .innerJoin(
             schema.rule,
-            eq(schema.processedEmail.ruleId, schema.rule.id)
+            eq(schema.ruleExecution.ruleId, schema.rule.id)
           )
           .where(eq(schema.rule.userId, input.userId))
-          .orderBy(desc(schema.processedEmail.processedAt))
+          .orderBy(desc(schema.ruleExecution.executedAt))
           .limit(input.limit);
       }),
   }),

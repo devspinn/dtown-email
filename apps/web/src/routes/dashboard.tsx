@@ -16,8 +16,8 @@ function DashboardPage() {
   const [newRuleName, setNewRuleName] = useState("");
   const [newRuleDescription, setNewRuleDescription] = useState("");
   const [newRuleAction, setNewRuleAction] = useState<
-    "ARCHIVE" | "LABEL" | "DELETE" | "ARCHIVE_AND_LABEL" | "MUTE" | "ARCHIVE_LABEL_AND_MUTE"
-  >("ARCHIVE_LABEL_AND_MUTE");
+    "LABEL" | "LABEL_AND_ARCHIVE" | "LABEL_AND_MUTE"
+  >("LABEL_AND_MUTE");
   const [newRuleLabel, setNewRuleLabel] = useState("");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
@@ -119,12 +119,7 @@ function DashboardPage() {
         description: newRuleDescription,
         systemPrompt: result.systemPrompt,
         actionType: newRuleAction,
-        actionValue:
-          newRuleAction === "LABEL" ||
-          newRuleAction === "ARCHIVE_AND_LABEL" ||
-          newRuleAction === "ARCHIVE_LABEL_AND_MUTE"
-            ? newRuleLabel
-            : undefined,
+        actionValue: newRuleLabel,
         priority: 0,
       });
     } finally {
@@ -270,41 +265,32 @@ function DashboardPage() {
                   onChange={(e) =>
                     setNewRuleAction(
                       e.target.value as
-                        | "ARCHIVE"
                         | "LABEL"
-                        | "DELETE"
-                        | "ARCHIVE_AND_LABEL"
-                        | "MUTE"
-                        | "ARCHIVE_LABEL_AND_MUTE"
+                        | "LABEL_AND_ARCHIVE"
+                        | "LABEL_AND_MUTE"
                     )
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="ARCHIVE">Archive</option>
                   <option value="LABEL">Add Label</option>
-                  <option value="ARCHIVE_AND_LABEL">Archive and Label</option>
-                  <option value="MUTE">Mute Thread</option>
-                  <option value="ARCHIVE_LABEL_AND_MUTE">Archive, Label, and Mute</option>
-                  <option value="DELETE">Delete</option>
+                  <option value="LABEL_AND_ARCHIVE">Label and Archive</option>
+                  <option value="LABEL_AND_MUTE">Label and Mute Thread</option>
                 </select>
               </div>
 
-              {(newRuleAction === "LABEL" ||
-                newRuleAction === "ARCHIVE_AND_LABEL" ||
-                newRuleAction === "ARCHIVE_LABEL_AND_MUTE") && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Label Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newRuleLabel}
-                    onChange={(e) => setNewRuleLabel(e.target.value)}
-                    placeholder="e.g., Cold Sales"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              )}
+              {/* All actions require a label */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Label Name *
+                </label>
+                <input
+                  type="text"
+                  value={newRuleLabel}
+                  onChange={(e) => setNewRuleLabel(e.target.value)}
+                  placeholder="e.g., Cold Sales"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
 
               <div className="flex gap-3 pt-2">
                 <button

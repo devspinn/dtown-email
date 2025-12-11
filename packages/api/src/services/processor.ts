@@ -64,12 +64,13 @@ export class EmailProcessor {
         `Email matched rule "${match.rule.name}" with ${match.result.confidence}% confidence`
       );
 
-      // Log the match to processed_emails table
-      await db.insert(schema.processedEmail).values({
+      // Log the execution to rule_execution table
+      await db.insert(schema.ruleExecution).values({
         emailId,
         ruleId: match.rule.id,
         matched: true,
         confidence: match.result.confidence,
+        reasoning: match.result.reasoning,
         actionTaken: match.rule.actionType,
         llmResponse: JSON.stringify(match.result),
       });
@@ -191,12 +192,6 @@ export class EmailProcessor {
       emailAccount.userId,
       gmailService
     );
-
-    // 4. Update lastProcessedAt timestamp
-    await db
-      .update(schema.email)
-      .set({ lastProcessedAt: new Date() })
-      .where(eq(schema.email.id, emailId));
   }
 
   /**
@@ -206,63 +201,40 @@ export class EmailProcessor {
     gmailMessageId: string,
     threadId: string,
     actionType: string,
-    actionValue: string | null | undefined,
+    actionValue: string,
     gmailService: GmailService
   ): Promise<void> {
     try {
       switch (actionType) {
-        case "ARCHIVE":
-          await gmailService.archiveEmail(gmailMessageId);
-          console.log(`Archived email ${gmailMessageId}`);
-          break;
-
         case "LABEL":
-          if (!actionValue) {
-            throw new Error("Label action requires actionValue");
-          }
           await gmailService.addLabel(gmailMessageId, actionValue);
           console.log(
-            `Added label "${actionValue}" to email ${gmailMessageId}`
+            `✅ Added label "${actionValue}" to email ${gmailMessageId}`
           );
           break;
 
-        case "DELETE":
-          await gmailService.deleteEmail(gmailMessageId);
-          console.log(`Deleted email ${gmailMessageId}`);
-          break;
-
-        case "ARCHIVE_AND_LABEL":
-          if (!actionValue) {
-            throw new Error("Archive+Label action requires actionValue");
-          }
+        case "LABEL_AND_ARCHIVE":
           await gmailService.addLabel(gmailMessageId, actionValue);
           await gmailService.archiveEmail(gmailMessageId);
           console.log(
-            `Archived and labeled "${actionValue}" email ${gmailMessageId}`
+            `✅ Labeled "${actionValue}" and archived email ${gmailMessageId}`
           );
           break;
 
-        case "MUTE":
-          await gmailService.muteThread(threadId);
-          console.log(`Muted thread ${threadId} for email ${gmailMessageId}`);
-          break;
-
-        case "ARCHIVE_LABEL_AND_MUTE":
-          if (!actionValue) {
-            throw new Error("Archive+Label+Mute action requires actionValue");
-          }
+        case "LABEL_AND_MUTE":
           await gmailService.addLabel(gmailMessageId, actionValue);
           await gmailService.muteThread(threadId);
           console.log(
-            `Labeled "${actionValue}", archived, and muted thread ${threadId} for email ${gmailMessageId}`
+            `✅ Labeled "${actionValue}" and muted thread ${threadId} (email ${gmailMessageId})`
           );
           break;
 
         default:
-          console.warn(`Unknown action type: ${actionType}`);
+          console.warn(`⚠️ Unknown action type: ${actionType}`);
+          throw new Error(`Unknown action type: ${actionType}`);
       }
     } catch (error) {
-      console.error(`Failed to execute action ${actionType}:`, error);
+      console.error(`❌ Failed to execute action ${actionType}:`, error);
       throw error;
     }
   }
@@ -317,13 +289,7 @@ export class EmailProcessor {
       gmailService
     );
 
-    // Update lastProcessedAt timestamp
-    await db
-      .update(schema.email)
-      .set({ lastProcessedAt: new Date() })
-      .where(eq(schema.email.id, emailId));
-
-    console.log(`✅ Email processed and lastProcessedAt updated`);
+    console.log(`✅ Email processed successfully`);
   }
 
   /**

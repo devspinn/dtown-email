@@ -101,15 +101,17 @@ export const rule = pgTable("rule", {
   name: text("name").notNull(), // e.g., "Cold Sales Filter"
   description: text("description"), // User's natural language description
   systemPrompt: text("systemPrompt").notNull(), // The actual prompt sent to Claude
-  actionType: text("actionType").notNull(), // "ARCHIVE", "LABEL", "DELETE", "MOVE"
-  actionValue: text("actionValue"), // Label name or folder ID
+  actionType: text("actionType", {
+    enum: ["LABEL", "LABEL_AND_ARCHIVE", "LABEL_AND_MUTE"],
+  }).notNull(),
+  actionValue: text("actionValue").notNull(), // Label name (required for all actions)
   isActive: boolean("isActive").notNull().default(true),
   priority: integer("priority").notNull().default(0), // Order of rule execution
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
-// Emails table - cached emails for faster access and search
+// Emails table - cached emails from Gmail (read-only cache, no first-party data)
 export const email = pgTable("email", {
   id: text("id")
     .primaryKey()
@@ -129,12 +131,12 @@ export const email = pgTable("email", {
   receivedAt: timestamp("receivedAt").notNull(),
   isRead: boolean("isRead").notNull().default(false),
   isStarred: boolean("isStarred").notNull().default(false),
-  lastProcessedAt: timestamp("lastProcessedAt"), // Last time this email was processed against rules
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
-// Processed Emails table - audit trail of rule executions
-export const processedEmail = pgTable("processed_email", {
+// Rule Executions table - audit trail of all rule executions
+// Multiple rules can be executed against a single email
+export const ruleExecution = pgTable("rule_execution", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -144,11 +146,12 @@ export const processedEmail = pgTable("processed_email", {
   ruleId: text("ruleId")
     .notNull()
     .references(() => rule.id, { onDelete: "cascade" }),
-  matched: boolean("matched").notNull(),
-  confidence: integer("confidence"), // 0-100
-  actionTaken: text("actionTaken"), // What action was performed
+  matched: boolean("matched").notNull(), // Did the email match the rule?
+  confidence: integer("confidence"), // Confidence score (0-100)
+  reasoning: text("reasoning"), // AI's reasoning for the decision
+  actionTaken: text("actionTaken"), // What action was performed (ARCHIVE, LABEL, etc.)
   llmResponse: text("llmResponse"), // Full LLM response for debugging
-  processedAt: timestamp("processedAt").notNull().defaultNow(),
+  executedAt: timestamp("executedAt").notNull().defaultNow(),
 });
 
 // Type exports for use in the application
@@ -162,5 +165,5 @@ export type Rule = typeof rule.$inferSelect;
 export type NewRule = typeof rule.$inferInsert;
 export type Email = typeof email.$inferSelect;
 export type NewEmail = typeof email.$inferInsert;
-export type ProcessedEmail = typeof processedEmail.$inferSelect;
-export type NewProcessedEmail = typeof processedEmail.$inferInsert;
+export type RuleExecution = typeof ruleExecution.$inferSelect;
+export type NewRuleExecution = typeof ruleExecution.$inferInsert;

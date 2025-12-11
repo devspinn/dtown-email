@@ -54,6 +54,8 @@ export class GmailService {
     });
 
     const messages = listResponse.data.messages || [];
+    console.log(`Fetched ${messages.length} recent emails from Gmail`);
+    console.log(JSON.stringify(messages, null, 2));
     const emailPromises = messages.map((msg) => this.getEmailDetails(msg.id!));
 
     return Promise.all(emailPromises);
