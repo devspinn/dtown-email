@@ -222,7 +222,10 @@ export const appRouter = t.router({
         const processor = new EmailProcessor();
 
         try {
-          const syncCount = await processor.syncEmails(emailAccount, input.limit);
+          const syncCount = await processor.syncEmails(
+            emailAccount,
+            input.limit
+          );
           console.log(`✅ Synced ${syncCount} new emails from Gmail`);
         } catch (error) {
           console.error("❌ Failed to sync emails:", error);
@@ -431,58 +434,17 @@ export const appRouter = t.router({
 
             const startTime = Date.now();
 
-            // Execute the action based on rule type
-            switch (rule.actionType) {
-              case "ARCHIVE":
-                await gmailService.archiveEmail(email.gmailMessageId);
-                console.log(`    ✅ Archived (${Date.now() - startTime}ms)`);
-                break;
-              case "LABEL":
-                if (rule.actionValue) {
-                  await gmailService.addLabel(
-                    email.gmailMessageId,
-                    rule.actionValue
-                  );
-                  console.log(
-                    `    ✅ Added label "${rule.actionValue}" (${Date.now() - startTime}ms)`
-                  );
-                }
-                break;
-              case "ARCHIVE_AND_LABEL":
-                if (rule.actionValue) {
-                  await gmailService.addLabel(
-                    email.gmailMessageId,
-                    rule.actionValue
-                  );
-                }
-                await gmailService.archiveEmail(email.gmailMessageId);
-                console.log(
-                  `    ✅ Archived and labeled "${rule.actionValue}" (${Date.now() - startTime}ms)`
-                );
-                break;
-              case "MUTE":
-                await gmailService.muteThread(email.gmailMessageId);
-                console.log(
-                  `    ✅ Muted thread (${Date.now() - startTime}ms)`
-                );
-                break;
-              case "ARCHIVE_LABEL_AND_MUTE":
-                if (rule.actionValue) {
-                  await gmailService.addLabel(
-                    email.gmailMessageId,
-                    rule.actionValue
-                  );
-                }
-                await gmailService.muteThread(email.gmailMessageId);
-                console.log(
-                  `    ✅ Labeled "${rule.actionValue}", archived, and muted thread (${Date.now() - startTime}ms)`
-                );
-                break;
-              case "DELETE":
-                await gmailService.deleteEmail(email.gmailMessageId);
-                console.log(`    ✅ Deleted (${Date.now() - startTime}ms)`);
-                break;
-            }
+            // Execute the action using shared processor logic
+            await processor.executeAction(
+              email.gmailMessageId,
+              email.threadId,
+              rule.actionType,
+              rule.actionValue,
+              gmailService
+            );
+            console.log(
+              `    ✅ Action "${rule.actionType}" executed (${Date.now() - startTime}ms)`
+            );
 
             // Log to processed_email table for audit trail
             await ctx.db.insert(schema.processedEmail).values({

@@ -1,4 +1,10 @@
-import { pgTable, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  integer,
+} from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Better Auth Users table
@@ -112,7 +118,7 @@ export const email = pgTable("email", {
   emailAccountId: text("emailAccountId")
     .notNull()
     .references(() => emailAccount.id, { onDelete: "cascade" }),
-  threadId: text("threadId"),
+  threadId: text("threadId").notNull(),
   from: text("from").notNull(),
   to: text("to"),
   subject: text("subject"),

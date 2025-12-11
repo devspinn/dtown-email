@@ -50,7 +50,7 @@ export class GmailService {
       userId: "me",
       maxResults,
       q: "category:primary",
-      // No query filter - fetch all recent emails including archived ones
+      // fetch all recent emails including archived ones
     });
 
     const messages = listResponse.data.messages || [];
@@ -190,21 +190,8 @@ export class GmailService {
    * We use a custom label instead of Gmail's MUTED system label
    * The email processor will automatically archive future messages in this thread
    */
-  async muteThread(messageId: string): Promise<void> {
+  async muteThread(threadId: string): Promise<void> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
-
-    // First, get the thread ID from the message
-    const message = await gmail.users.messages.get({
-      userId: "me",
-      id: messageId,
-      format: "minimal",
-    });
-
-    const threadId = message.data.threadId;
-    if (!threadId) {
-      throw new Error("Thread ID not found for message");
-    }
-
     // Get or create the user-muted label
     const userMutedLabelId = await this.getOrCreateLabel("user-muted");
 

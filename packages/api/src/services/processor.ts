@@ -17,6 +17,7 @@ export class EmailProcessor {
     emailId: string,
     emailBody: string,
     gmailMessageId: string,
+    threadId: string,
     userId: string,
     gmailService: GmailService
   ): Promise<void> {
@@ -76,6 +77,7 @@ export class EmailProcessor {
       // Execute the action
       await this.executeAction(
         gmailMessageId,
+        threadId,
         match.rule.actionType,
         match.rule.actionValue,
         gmailService
@@ -185,6 +187,7 @@ export class EmailProcessor {
       emailId,
       emailMessage.bodyText,
       emailMessage.id,
+      emailMessage.threadId,
       emailAccount.userId,
       gmailService
     );
@@ -199,8 +202,9 @@ export class EmailProcessor {
   /**
    * Execute an action on an email (archive, label, delete, etc.)
    */
-  private async executeAction(
+  async executeAction(
     gmailMessageId: string,
+    threadId: string,
     actionType: string,
     actionValue: string | null | undefined,
     gmailService: GmailService
@@ -239,8 +243,8 @@ export class EmailProcessor {
           break;
 
         case "MUTE":
-          await gmailService.muteThread(gmailMessageId);
-          console.log(`Muted thread for email ${gmailMessageId}`);
+          await gmailService.muteThread(threadId);
+          console.log(`Muted thread ${threadId} for email ${gmailMessageId}`);
           break;
 
         case "ARCHIVE_LABEL_AND_MUTE":
@@ -248,9 +252,9 @@ export class EmailProcessor {
             throw new Error("Archive+Label+Mute action requires actionValue");
           }
           await gmailService.addLabel(gmailMessageId, actionValue);
-          await gmailService.muteThread(gmailMessageId);
+          await gmailService.muteThread(threadId);
           console.log(
-            `Labeled "${actionValue}", archived, and muted thread for email ${gmailMessageId}`
+            `Labeled "${actionValue}", archived, and muted thread ${threadId} for email ${gmailMessageId}`
           );
           break;
 
@@ -308,6 +312,7 @@ export class EmailProcessor {
       emailId,
       email.bodyText,
       email.gmailMessageId,
+      email.threadId,
       userId,
       gmailService
     );
