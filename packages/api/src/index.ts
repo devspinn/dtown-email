@@ -51,22 +51,42 @@ app.all("/api/auth/**", async (context) => {
   } catch (error) {
     console.error("Auth handler error:", error);
     return context.json(
-      { error: "Auth handler failed", details: error.message },
+      {
+        error: "Auth handler failed",
+        details:
+          error instanceof Error
+            ? error.message
+            : "Cannot find. Check the code.",
+      },
       500
     );
   }
 });
 
 // tRPC endpoints - using a specific path pattern for proper routing
-app.all("/api/trpc/*", async (c) => {
-  return trpcServer({
+// app.all("/api/trpc/*", async (c) => {
+//   return trpcServer({
+//     router: appRouter,
+//     createContext: (opts) => {
+//       return createContext(c.env);
+//     },
+//     endpoint: "/api/trpc",
+//   })(c);
+// });
+
+// Remove the async wrapper
+app.all(
+  "/api/trpc/*",
+  trpcServer({
     router: appRouter,
-    createContext: (opts) => {
+    endpoint: "/api/trpc",
+    // In @hono/trpc-server, createContext receives (opts, c)
+    createContext: (_opts, c) => {
+      // Access env directly from the 'c' passed here
       return createContext(c.env);
     },
-    endpoint: "/api/trpc",
-  })(c);
-});
+  })
+);
 
 // Health check endpoint
 app.get("/health", (c) => c.json({ status: "ok!" }));

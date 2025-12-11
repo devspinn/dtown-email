@@ -310,7 +310,7 @@ export class EmailProcessor {
     // Process email against all active rules (shared logic)
     await this.processEmailAgainstRules(
       emailId,
-      email.bodyText,
+      email.bodyText || "[No body text]",
       email.gmailMessageId,
       email.threadId,
       userId,
