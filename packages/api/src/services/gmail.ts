@@ -49,13 +49,12 @@ export class GmailService {
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults,
-      q: "category:primary",
+      q: "category:primary OR label:cold-sales OR label: cold sales 3",
       // fetch all recent emails including archived ones
     });
 
     const messages = listResponse.data.messages || [];
     console.log(`Fetched ${messages.length} recent emails from Gmail`);
-    console.log(JSON.stringify(messages, null, 2));
     const emailPromises = messages.map((msg) => this.getEmailDetails(msg.id!));
 
     return Promise.all(emailPromises);
@@ -74,6 +73,19 @@ export class GmailService {
     });
 
     const message = response.data;
+    console.log(`Fetched email details for message ID: ${messageId}`);
+    console.log([
+      message.id,
+      message.labelIds,
+      message.threadId,
+      message.snippet,
+    ]);
+    console.log(
+      typeof message.internalDate === "string"
+        ? new Date(Number(message.internalDate)).toLocaleString()
+        : "sometihng went wrong lol"
+    );
+
     const headers = message.payload?.headers || [];
 
     // Extract headers
@@ -141,21 +153,31 @@ export class GmailService {
     };
   }
 
+  private async getSystemLabel(): Promise<string> {
+    return this.getOrCreateLabel("prcsd-dtown", true);
+  }
+
   /**
    * Apply a label to an email
    */
   async addLabel(messageId: string, labelName: string): Promise<void> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
+    const labelIds: string[] = [];
     // First, get or create the label
     const labelId = await this.getOrCreateLabel(labelName);
+    labelIds.push(labelId);
+    if (labelName.toLowerCase() !== "prcsd-dtown") {
+      const processedLabelId = await this.getOrCreateLabel("prcsd-dtown");
+      labelIds.push(processedLabelId);
+    }
 
     // Apply the label
     await gmail.users.messages.modify({
       userId: "me",
       id: messageId,
       requestBody: {
-        addLabelIds: [labelId],
+        addLabelIds: labelIds,
       },
     });
   }
@@ -165,25 +187,15 @@ export class GmailService {
    */
   async archiveEmail(messageId: string): Promise<void> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+    const systemLabel = await this.getSystemLabel();
 
     await gmail.users.messages.modify({
       userId: "me",
       id: messageId,
       requestBody: {
         removeLabelIds: ["INBOX"],
+        addLabelIds: [systemLabel],
       },
-    });
-  }
-
-  /**
-   * Delete an email (move to trash)
-   */
-  async deleteEmail(messageId: string): Promise<void> {
-    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
-
-    await gmail.users.messages.trash({
-      userId: "me",
-      id: messageId,
     });
   }
 
@@ -195,7 +207,7 @@ export class GmailService {
   async muteThread(threadId: string): Promise<void> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
     // Get or create the user-muted label
-    const userMutedLabelId = await this.getOrCreateLabel("user-muted");
+    const userMutedLabelId = await this.getOrCreateLabel("user-muted", true);
 
     // Apply the user-muted label and remove INBOX at thread level
     await gmail.users.threads.modify({
@@ -211,7 +223,10 @@ export class GmailService {
   /**
    * Get or create a Gmail label
    */
-  private async getOrCreateLabel(labelName: string): Promise<string> {
+  private async getOrCreateLabel(
+    labelName: string,
+    hidden?: boolean
+  ): Promise<string> {
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
     // List existing labels
@@ -232,8 +247,8 @@ export class GmailService {
       userId: "me",
       requestBody: {
         name: labelName,
-        labelListVisibility: "labelShow",
-        messageListVisibility: "show",
+        labelListVisibility: hidden ? "labelHide" : "labelShow",
+        messageListVisibility: hidden ? "hide" : "show",
       },
     });
 

@@ -22,6 +22,9 @@ function DashboardPage() {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
   const [testingRuleName, setTestingRuleName] = useState<string>("");
+  const [processingEmailId, setProcessingEmailId] = useState<string | null>(
+    null
+  );
 
   const utils = trpc.useUtils();
 
@@ -57,6 +60,10 @@ function DashboardPage() {
   const processEmailMutation = trpc.emails.processOne.useMutation({
     onSuccess: () => {
       utils.emails.list.invalidate();
+      setProcessingEmailId(null);
+    },
+    onError: () => {
+      setProcessingEmailId(null);
     },
   });
 
@@ -443,7 +450,7 @@ function DashboardPage() {
               onClick={() =>
                 syncEmailsMutation.mutate({
                   userId: session?.user.id || "",
-                  maxEmails: 50,
+                  maxEmails: 10,
                 })
               }
               disabled={syncEmailsMutation.isPending}
@@ -560,16 +567,17 @@ function DashboardPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
-                              onClick={() =>
+                              onClick={() => {
+                                setProcessingEmailId(email.id);
                                 processEmailMutation.mutate({
                                   emailId: email.id,
                                   userId: session?.user.id || "",
-                                })
-                              }
-                              disabled={processEmailMutation.isPending}
+                                });
+                              }}
+                              disabled={processingEmailId === email.id}
                               className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
                             >
-                              {processEmailMutation.isPending ? (
+                              {processingEmailId === email.id ? (
                                 <>
                                   <svg
                                     className="animate-spin h-3 w-3 mr-1"

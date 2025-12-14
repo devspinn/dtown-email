@@ -508,7 +508,7 @@ export const appRouter = t.router({
         console.log(`👤 User ID: ${input.userId}`);
         console.log(`📊 Max emails: ${input.maxEmails}`);
 
-        const processor = new EmailProcessor();
+        const emailProcessor = new EmailProcessor();
 
         // Get the user's email account (one per user)
         const [emailAccount] = await ctx.db
@@ -527,7 +527,7 @@ export const appRouter = t.router({
         console.log(`📧 Email account: ${emailAccount.email}`);
 
         try {
-          const newEmailCount = await processor.syncEmails(
+          const newEmailCount = await emailProcessor.syncEmails(
             emailAccount,
             input.maxEmails
           );

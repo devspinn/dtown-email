@@ -104,6 +104,8 @@ Does this email match the rule? Respond with JSON only.`,
       }))
     );
 
+    console.log("Classification results:", classifications, emailBody);
+
     // Filter to only matched rules and sort by confidence
     return classifications
       .filter((c) => c.result.matched)
