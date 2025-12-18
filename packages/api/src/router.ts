@@ -554,10 +554,66 @@ export const appRouter = t.router({
           maxEmails: z.number().default(10),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        console.log(`\n⚡ ========== PROCESSING EMAILS ==========`);
+        console.log(`👤 User ID: ${input.userId}`);
+        console.log(`📊 Max emails: ${input.maxEmails}`);
+
         const processor = new EmailProcessor();
-        await processor.processUserEmails(input.userId, input.maxEmails);
-        return { success: true, message: "Email processing started" };
+
+        // Get the user's email account
+        const [emailAccount] = await ctx.db
+          .select()
+          .from(schema.emailAccount)
+          .where(eq(schema.emailAccount.userId, input.userId))
+          .limit(1);
+
+        if (!emailAccount) {
+          throw new Error("No email account found");
+        }
+
+        // Step 1: Sync emails from Gmail to database
+        console.log(`📥 Step 1: Syncing emails from Gmail...`);
+        const syncCount = await processor.syncEmails(emailAccount, input.maxEmails);
+        console.log(`✅ Synced ${syncCount} new emails`);
+
+        // Step 2: Get unprocessed emails from database (those without prcsd-dtown label)
+        console.log(`📋 Step 2: Finding unprocessed emails...`);
+        const unprocessedEmails = await ctx.db
+          .select()
+          .from(schema.email)
+          .where(eq(schema.email.emailAccountId, emailAccount.id))
+          .orderBy(desc(schema.email.receivedAt))
+          .limit(input.maxEmails);
+
+        const emailsToProcess = unprocessedEmails.filter((email) => {
+          const labels = JSON.parse(email.labelIds || "[]");
+          return !labels.includes("prcsd-dtown");
+        });
+
+        console.log(`🔄 Found ${emailsToProcess.length} unprocessed emails`);
+
+        // Step 3: Process each email
+        let processed = 0;
+        for (const email of emailsToProcess) {
+          try {
+            await processor.processEmailById(email.id, input.userId);
+            processed++;
+          } catch (error) {
+            console.error(`❌ Failed to process email ${email.id}:`, error);
+          }
+        }
+
+        console.log(`\n✅ ========== PROCESSING COMPLETE ==========`);
+        console.log(`✅ Processed ${processed}/${emailsToProcess.length} emails`);
+        console.log(`===========================================\n`);
+
+        return {
+          success: true,
+          message: `Processed ${processed} emails`,
+          synced: syncCount,
+          processed,
+        };
       }),
 
     // Process a single email by ID

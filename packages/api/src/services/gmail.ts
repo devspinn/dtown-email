@@ -190,7 +190,7 @@ export class GmailService {
   }
 
   private async getSystemLabel(): Promise<string> {
-    return this.getOrCreateLabel("prcsd-dtown", true);
+    return this.getOrCreateLabel("prcsd-dtown", false);
   }
 
   /**
