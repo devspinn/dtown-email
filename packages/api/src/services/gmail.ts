@@ -42,14 +42,15 @@ export class GmailService {
   /**
    * Fetch recent emails from Gmail
    */
-  async fetchRecentEmails(maxResults = 10): Promise<EmailMessage[]> {
+  async fetchRecentEmails(maxResults = 20): Promise<EmailMessage[]> {
+    console.log("Fetching recent emails from Gmail... (fetchRecentEmails)");
     const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
     // List messages (no query filter to get all recent emails, including archived)
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults,
-      q: "category:primary OR label:cold-sales OR label: cold sales 3",
+      q: "category:primary OR label:cold-sales",
       // fetch all recent emails including archived ones
     });
 
@@ -153,73 +154,6 @@ export class GmailService {
     };
   }
 
-  private async getSystemLabel(): Promise<string> {
-    return this.getOrCreateLabel("prcsd-dtown", true);
-  }
-
-  /**
-   * Apply a label to an email
-   */
-  async addLabel(messageId: string, labelName: string): Promise<void> {
-    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
-
-    const labelIds: string[] = [];
-    // First, get or create the label
-    const labelId = await this.getOrCreateLabel(labelName);
-    labelIds.push(labelId);
-    if (labelName.toLowerCase() !== "prcsd-dtown") {
-      const processedLabelId = await this.getOrCreateLabel("prcsd-dtown");
-      labelIds.push(processedLabelId);
-    }
-
-    // Apply the label
-    await gmail.users.messages.modify({
-      userId: "me",
-      id: messageId,
-      requestBody: {
-        addLabelIds: labelIds,
-      },
-    });
-  }
-
-  /**
-   * Archive an email (remove INBOX label)
-   */
-  async archiveEmail(messageId: string): Promise<void> {
-    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
-    const systemLabel = await this.getSystemLabel();
-
-    await gmail.users.messages.modify({
-      userId: "me",
-      id: messageId,
-      requestBody: {
-        removeLabelIds: ["INBOX"],
-        addLabelIds: [systemLabel],
-      },
-    });
-  }
-
-  /**
-   * Mute a thread by applying custom user-muted label and archiving
-   * We use a custom label instead of Gmail's MUTED system label
-   * The email processor will automatically archive future messages in this thread
-   */
-  async muteThread(threadId: string): Promise<void> {
-    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
-    // Get or create the user-muted label
-    const userMutedLabelId = await this.getOrCreateLabel("user-muted", true);
-
-    // Apply the user-muted label and remove INBOX at thread level
-    await gmail.users.threads.modify({
-      userId: "me",
-      id: threadId,
-      requestBody: {
-        addLabelIds: [userMutedLabelId],
-        removeLabelIds: ["INBOX"],
-      },
-    });
-  }
-
   /**
    * Get or create a Gmail label
    */
@@ -253,6 +187,92 @@ export class GmailService {
     });
 
     return createResponse.data.id!;
+  }
+
+  private async getSystemLabel(): Promise<string> {
+    return this.getOrCreateLabel("prcsd-dtown", true);
+  }
+
+  /**
+   * Apply a label and the system label to an email
+   */
+  async addLabel(messageId: string, labelName: string): Promise<void> {
+    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+    let labelId: string;
+
+    // List existing labels
+    const labelsResponse = await gmail.users.labels.list({
+      userId: "me",
+    });
+
+    const existingLabel = labelsResponse.data.labels?.find(
+      (l) => l.name === labelName
+    );
+
+    if (existingLabel) {
+      labelId = existingLabel.id!;
+    } else {
+      // Create new label
+      const createResponse = await gmail.users.labels.create({
+        userId: "me",
+        requestBody: {
+          name: labelName,
+          labelListVisibility: "labelShow",
+          messageListVisibility: "show",
+        },
+      });
+      labelId = createResponse.data.id!;
+    }
+
+    const systemLabel = await this.getSystemLabel();
+
+    // Apply the label
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: {
+        addLabelIds: [labelId, systemLabel],
+      },
+    });
+  }
+
+  /**
+   * Archive an email and add system label (remove INBOX label)
+   */
+  async archiveEmail(messageId: string): Promise<void> {
+    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+    const systemLabel = await this.getSystemLabel();
+
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: {
+        removeLabelIds: ["INBOX"],
+        addLabelIds: [systemLabel],
+      },
+    });
+  }
+
+  /**
+   * Mute a thread by applying custom user-muted label and archiving
+   * We use a custom label instead of Gmail's MUTED system label
+   * The email processor will automatically archive future messages in this thread
+   */
+  async muteThread(threadId: string): Promise<void> {
+    const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+    // Get or create the user-muted label
+    const userMutedLabelId = await this.getOrCreateLabel("user-muted");
+    const systemLabel = await this.getSystemLabel();
+
+    // Apply the user-muted label and remove INBOX at thread level
+    await gmail.users.threads.modify({
+      userId: "me",
+      id: threadId,
+      requestBody: {
+        addLabelIds: [userMutedLabelId, systemLabel],
+        removeLabelIds: ["INBOX"],
+      },
+    });
   }
 
   /**

@@ -79,9 +79,9 @@ export class EmailProcessor {
       await this.executeAction(
         gmailMessageId,
         threadId,
+        gmailService,
         match.rule.actionType,
-        match.rule.actionValue,
-        gmailService
+        match.rule.actionValue || undefined
       );
       console.log(
         `Executed action "${match.rule.actionType}" for email ${gmailMessageId}`
@@ -200,13 +200,16 @@ export class EmailProcessor {
   async executeAction(
     gmailMessageId: string,
     threadId: string,
+    gmailService: GmailService,
     actionType: string,
-    actionValue: string,
-    gmailService: GmailService
+    actionValue?: string
   ): Promise<void> {
     try {
       switch (actionType) {
         case "LABEL":
+          if (!actionValue) {
+            throw new Error("LABEL action requires actionValue (label name)");
+          }
           await gmailService.addLabel(gmailMessageId, actionValue);
           console.log(
             `✅ Added label "${actionValue}" to email ${gmailMessageId}`
@@ -214,7 +217,6 @@ export class EmailProcessor {
           break;
 
         case "LABEL_AND_ARCHIVE":
-          await gmailService.addLabel(gmailMessageId, actionValue);
           await gmailService.archiveEmail(gmailMessageId);
           console.log(
             `✅ Labeled "${actionValue}" and archived email ${gmailMessageId}`
@@ -222,7 +224,6 @@ export class EmailProcessor {
           break;
 
         case "LABEL_AND_MUTE":
-          await gmailService.addLabel(gmailMessageId, actionValue);
           await gmailService.muteThread(threadId);
           console.log(
             `✅ Labeled "${actionValue}" and muted thread ${threadId} (email ${gmailMessageId})`
