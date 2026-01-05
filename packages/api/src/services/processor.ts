@@ -9,7 +9,6 @@ export class EmailProcessor {
     this.aiService = new AIService();
   }
 
-
   /**
    * Execute an action on an email (archive, label, delete, etc.)
    */
@@ -59,7 +58,7 @@ export class EmailProcessor {
   /**
    * Process a single email by its database ID against all active rules
    * Email must already be synced to the database
-   * Always applies 'prcsd-dtown' label to mark as processed
+   * Always applies 'prcsd' label to mark as processed
    */
   async processEmailById(emailId: string, userId: string): Promise<void> {
     console.log(`\n⚡ Processing email ${emailId}...`);
@@ -104,7 +103,9 @@ export class EmailProcessor {
     const rules = await db
       .select()
       .from(schema.rule)
-      .where(and(eq(schema.rule.userId, userId), eq(schema.rule.isActive, true)))
+      .where(
+        and(eq(schema.rule.userId, userId), eq(schema.rule.isActive, true))
+      )
       .orderBy(schema.rule.priority);
 
     console.log(`📋 Found ${rules.length} active rules`);
@@ -165,13 +166,33 @@ export class EmailProcessor {
       console.log(`⚪ No rules matched for this email`);
     }
 
-    // Always apply 'prcsd-dtown' label to mark as processed
-    await gmailService.addLabel(email.gmailMessageId, "prcsd-dtown");
-    console.log(`✅ Applied 'prcsd-dtown' label`);
+    // Always apply 'prcsd' label to mark as processed
+    await gmailService.addLabel(email.gmailMessageId, "prcsd");
+    console.log(`✅ Applied 'prcsd' label`);
 
-    console.log(`✅ Email processing complete\n`);
+    // Fetch updated email from Gmail to get current labels after processing
+    console.log(`🔄 Syncing updated labels to database...`);
+    const updatedEmailDetails = await gmailService.getEmailDetails(
+      email.gmailMessageId
+    );
+
+    // Update the email in the database with current labels
+    await db
+      .update(schema.email)
+      .set({
+        labelIds: JSON.stringify(updatedEmailDetails.labelIds),
+        isRead: updatedEmailDetails.isRead,
+        isStarred: updatedEmailDetails.isStarred,
+      })
+      .where(eq(schema.email.id, emailId));
+
+    // Mark email as processed in tracking table
+    await db.insert(schema.processedEmail).values({
+      emailId,
+    }).onConflictDoNothing(); // In case it was already marked as processed
+
+    console.log(`✅ Email processing complete - labels synced to database\n`);
   }
-
 
   /**
    * Sync emails from Gmail to database WITHOUT processing them against rules

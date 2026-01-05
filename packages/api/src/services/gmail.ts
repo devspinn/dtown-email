@@ -50,7 +50,7 @@ export class GmailService {
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults,
-      q: "category:primary OR label:cold-sales",
+      q: "category:primary OR label:prcsd",
       // fetch all recent emails including archived ones
     });
 
@@ -190,7 +190,7 @@ export class GmailService {
   }
 
   private async getSystemLabel(): Promise<string> {
-    return this.getOrCreateLabel("prcsd-dtown", false);
+    return this.getOrCreateLabel("prcsd", false);
   }
 
   /**

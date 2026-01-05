@@ -22,8 +22,8 @@ function DashboardPage() {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
   const [testingRuleName, setTestingRuleName] = useState<string>("");
-  const [processingEmailId, setProcessingEmailId] = useState<string | null>(
-    null
+  const [processingEmailIds, setProcessingEmailIds] = useState<Set<string>>(
+    new Set()
   );
 
   const utils = trpc.useUtils();
@@ -58,12 +58,22 @@ function DashboardPage() {
 
   // Process single email mutation
   const processEmailMutation = trpc.emails.processOne.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       utils.emails.list.invalidate();
-      setProcessingEmailId(null);
+      // Remove this email from processing set
+      setProcessingEmailIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.emailId);
+        return next;
+      });
     },
-    onError: () => {
-      setProcessingEmailId(null);
+    onError: (_, variables) => {
+      // Remove this email from processing set
+      setProcessingEmailIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.emailId);
+        return next;
+      });
     },
   });
 
@@ -527,6 +537,9 @@ function DashboardPage() {
                         Received
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -565,19 +578,31 @@ function DashboardPage() {
                           <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                             {new Date(email.receivedAt).toLocaleString()}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {email.isProcessed ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Processed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                Unprocessed
+                              </span>
+                            )}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
                               onClick={() => {
-                                setProcessingEmailId(email.id);
+                                // Add to processing set
+                                setProcessingEmailIds((prev) => new Set(prev).add(email.id));
                                 processEmailMutation.mutate({
                                   emailId: email.id,
                                   userId: session?.user.id || "",
                                 });
                               }}
-                              disabled={processingEmailId === email.id}
+                              disabled={processingEmailIds.has(email.id)}
                               className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
                             >
-                              {processingEmailId === email.id ? (
+                              {processingEmailIds.has(email.id) ? (
                                 <>
                                   <svg
                                     className="animate-spin h-3 w-3 mr-1"

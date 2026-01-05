@@ -486,10 +486,32 @@ export const appRouter = t.router({
           return [];
         }
 
-        // Get emails for this account
+        // Get emails for this account with processed status
         return ctx.db
-          .select()
+          .select({
+            id: schema.email.id,
+            gmailMessageId: schema.email.gmailMessageId,
+            emailAccountId: schema.email.emailAccountId,
+            threadId: schema.email.threadId,
+            from: schema.email.from,
+            to: schema.email.to,
+            subject: schema.email.subject,
+            snippet: schema.email.snippet,
+            bodyText: schema.email.bodyText,
+            bodyHtml: schema.email.bodyHtml,
+            labelIds: schema.email.labelIds,
+            receivedAt: schema.email.receivedAt,
+            isRead: schema.email.isRead,
+            isStarred: schema.email.isStarred,
+            createdAt: schema.email.createdAt,
+            isProcessed: schema.processedEmail.id,
+            processedAt: schema.processedEmail.processedAt,
+          })
           .from(schema.email)
+          .leftJoin(
+            schema.processedEmail,
+            eq(schema.email.id, schema.processedEmail.emailId)
+          )
           .where(eq(schema.email.emailAccountId, account.id))
           .orderBy(desc(schema.email.receivedAt))
           .limit(input.limit);
@@ -574,22 +596,34 @@ export const appRouter = t.router({
 
         // Step 1: Sync emails from Gmail to database
         console.log(`📥 Step 1: Syncing emails from Gmail...`);
-        const syncCount = await processor.syncEmails(emailAccount, input.maxEmails);
+        const syncCount = await processor.syncEmails(
+          emailAccount,
+          input.maxEmails
+        );
         console.log(`✅ Synced ${syncCount} new emails`);
 
-        // Step 2: Get unprocessed emails from database (those without prcsd-dtown label)
+        // Step 2: Get unprocessed emails from database (those not in processed_email table)
         console.log(`📋 Step 2: Finding unprocessed emails...`);
-        const unprocessedEmails = await ctx.db
-          .select()
+        const emailsToProcess = await ctx.db
+          .select({
+            id: schema.email.id,
+            subject: schema.email.subject,
+            from: schema.email.from,
+          })
           .from(schema.email)
-          .where(eq(schema.email.emailAccountId, emailAccount.id))
+          .leftJoin(
+            schema.processedEmail,
+            eq(schema.email.id, schema.processedEmail.emailId)
+          )
+          .where(
+            and(
+              eq(schema.email.emailAccountId, emailAccount.id),
+              // Only get emails that haven't been processed
+              eq(schema.processedEmail.id, null)
+            )
+          )
           .orderBy(desc(schema.email.receivedAt))
           .limit(input.maxEmails);
-
-        const emailsToProcess = unprocessedEmails.filter((email) => {
-          const labels = JSON.parse(email.labelIds || "[]");
-          return !labels.includes("prcsd-dtown");
-        });
 
         console.log(`🔄 Found ${emailsToProcess.length} unprocessed emails`);
 
@@ -605,7 +639,9 @@ export const appRouter = t.router({
         }
 
         console.log(`\n✅ ========== PROCESSING COMPLETE ==========`);
-        console.log(`✅ Processed ${processed}/${emailsToProcess.length} emails`);
+        console.log(
+          `✅ Processed ${processed}/${emailsToProcess.length} emails`
+        );
         console.log(`===========================================\n`);
 
         return {

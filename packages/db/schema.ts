@@ -154,6 +154,18 @@ export const ruleExecution = pgTable("rule_execution", {
   executedAt: timestamp("executedAt").notNull().defaultNow(),
 });
 
+// Processed Emails tracking table - simple tracking of which emails have been processed
+export const processedEmail = pgTable("processed_email", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  emailId: text("emailId")
+    .notNull()
+    .unique()
+    .references(() => email.id, { onDelete: "cascade" }),
+  processedAt: timestamp("processedAt").notNull().defaultNow(),
+});
+
 // Type exports for use in the application
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
@@ -167,3 +179,5 @@ export type Email = typeof email.$inferSelect;
 export type NewEmail = typeof email.$inferInsert;
 export type RuleExecution = typeof ruleExecution.$inferSelect;
 export type NewRuleExecution = typeof ruleExecution.$inferInsert;
+export type ProcessedEmail = typeof processedEmail.$inferSelect;
+export type NewProcessedEmail = typeof processedEmail.$inferInsert;
